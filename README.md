@@ -37,3 +37,7 @@ const result = await client.submitTransaction(tx);
 - **TypeScript** - Full type safety
 
 ## Documentation
+
+## Governance & Support
+
+This SDK is community supported. Enterprise support is available at [allenhark.com](https://allenhark.com).
