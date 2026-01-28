@@ -38,4 +38,3 @@ const result = await client.submitTransaction(tx);
 
 ## Documentation
 
-See [Architecture Doc](../../slipstream_arch.md) Section 9.
