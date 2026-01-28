@@ -1,6 +1,6 @@
 # @allenhark/slipstream
 
-TypeScript/JavaScript SDK for Slipstream - Solana transaction relay.
+TypeScript/JavaScript SDK for Slipstream - Solana transaction relay. 
 
 ## Installation
 
