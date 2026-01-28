@@ -37,4 +37,3 @@ const result = await client.submitTransaction(tx);
 - **TypeScript** - Full type safety
 
 ## Documentation
-
