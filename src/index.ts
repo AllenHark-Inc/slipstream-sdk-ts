@@ -1,37 +1,99 @@
 /**
- * @allenhark/slipstream - TypeScript SDK for Slipstream
+ * @allenhark/slipstream — TypeScript SDK for Slipstream
+ *
+ * High-performance Solana transaction relay with leader-proximity-aware routing.
  *
  * @example
  * ```typescript
- * import { SlipstreamClient } from '@allenhark/slipstream';
+ * import { SlipstreamClient, configBuilder } from '@allenhark/slipstream';
  *
- * const client = new SlipstreamClient({ apiKey: 'sk_live_...' });
- * await client.connect();
+ * const config = configBuilder()
+ *   .apiKey('sk_test_12345678')
+ *   .region('us-east')
+ *   .build();
+ *
+ * const client = await SlipstreamClient.connect(config);
+ *
+ * // Submit a transaction
+ * const result = await client.submitTransaction(txBytes);
+ * console.log(`TX: ${result.transactionId}`);
+ *
+ * // Subscribe to leader hints
+ * client.on('leaderHint', (hint) => {
+ *   console.log(`Leader in ${hint.preferredRegion} (confidence: ${hint.confidence}%)`);
+ * });
+ * await client.subscribeLeaderHints();
+ *
+ * // Check token balance
+ * const balance = await client.getBalance();
+ * console.log(`Balance: ${balance.balanceSol} SOL (${balance.balanceTokens} tokens)`);
  * ```
  */
 
-// TODO: Implement SDK components
-// - SlipstreamClient
-// - ConnectionManager
-// - WorkerSelector
-// - StreamSubscriber
+// Client classes
+export { SlipstreamClient } from './client';
+export { MultiRegionClient } from './multi-region';
 
-export interface SlipstreamConfig {
-  apiKey: string;
-  region?: string;
-}
+// Configuration
+export { ConfigBuilder, configBuilder } from './config';
 
-export class SlipstreamClient {
-  constructor(config: SlipstreamConfig) {
-    // TODO: Implement
-  }
+// Error types
+export { SlipstreamError } from './errors';
 
-  async connect(): Promise<void> {
-    // TODO: Implement
-  }
+// All types
+export {
+  // Config types
+  SlipstreamConfig,
+  ProtocolTimeouts,
+  PriorityFeeConfig,
+  PriorityFeeSpeed,
+  BackoffStrategy,
 
-  async submitTransaction(tx: unknown): Promise<string> {
-    // TODO: Implement
-    return '';
-  }
-}
+  // Connection types
+  ConnectionInfo,
+  ConnectionStatus,
+  ConnectionState,
+  WorkerEndpoint,
+  RateLimitInfo,
+
+  // Streaming message types
+  LeaderHint,
+  LeaderHintMetadata,
+  TipInstruction,
+  AlternativeSender,
+  PriorityFee,
+
+  // Transaction types
+  TransactionResult,
+  TransactionStatus,
+  SubmitOptions,
+  RoutingInfo,
+  TransactionError,
+
+  // Token billing types
+  Balance,
+  TopUpInfo,
+  UsageEntry,
+  DepositEntry,
+  PendingDeposit,
+  PaginationOptions,
+
+  // Multi-region types
+  RoutingRecommendation,
+  FallbackStrategy,
+  MultiRegionConfig,
+  RegionStatus,
+
+  // Metrics
+  PerformanceMetrics,
+
+  // Config endpoint responses
+  RegionInfo,
+  SenderInfo,
+  TipTier,
+} from './types';
+
+// Worker selector (advanced usage)
+export { WorkerSelector } from './worker-selector';
+
+export const VERSION = '0.1.0';
