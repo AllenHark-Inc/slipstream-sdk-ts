@@ -1,6 +1,11 @@
-# @allenhark/slipstream
+[![allenhark.com](https://allenhark.com/allenhark-logo.png)](https://allenhark.com)
 
-TypeScript SDK for [Slipstream](https://slipstream.allenhark.com) -- a sender-agnostic Solana transaction relay with leader-proximity-aware routing and multi-region fan-in.
+# Slipstream TypeScript SDK
+
+The official TypeScript/JavaScript client for **AllenHark Slipstream**, the high-performance Solana transaction relay and intelligence network.
+
+[![npm](https://img.shields.io/npm/v/@allenhark/slipstream.svg)](https://www.npmjs.com/package/@allenhark/slipstream)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](LICENSE)
 
 ## Features
 
