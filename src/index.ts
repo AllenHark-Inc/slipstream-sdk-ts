@@ -37,6 +37,9 @@ export { MultiRegionClient } from './multi-region';
 // Configuration
 export { ConfigBuilder, configBuilder } from './config';
 
+// Discovery
+export { discover, DEFAULT_DISCOVERY_URL } from './discovery';
+
 // Error types
 export { SlipstreamError } from './errors';
 
@@ -86,6 +89,11 @@ export {
 
   // Metrics
   PerformanceMetrics,
+
+  // Discovery types
+  DiscoveryResponse,
+  DiscoveryRegion,
+  DiscoveryWorker,
 
   // Config endpoint responses
   RegionInfo,

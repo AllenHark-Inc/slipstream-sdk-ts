@@ -31,6 +31,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { discover, workersToEndpoints } from './discovery';
 import { SlipstreamError } from './errors';
 import { SlipstreamClient } from './client';
 import {
@@ -58,6 +59,34 @@ export class MultiRegionClient extends EventEmitter {
     this.multiConfig = multiConfig;
   }
 
+  /**
+   * Connect using automatic worker discovery.
+   * No manual worker configuration needed.
+   */
+  static async connect(
+    config: SlipstreamConfig,
+    multiConfig?: MultiRegionConfig,
+  ): Promise<MultiRegionClient> {
+    const mc: MultiRegionConfig = multiConfig ?? {
+      autoFollowLeader: true,
+      minSwitchConfidence: 60,
+      switchCooldownMs: 5000,
+      broadcastHighPriority: false,
+      maxBroadcastRegions: 3,
+    };
+
+    const response = await discover(config.discoveryUrl);
+    const workers = workersToEndpoints(response.workers);
+    if (workers.length === 0) {
+      throw SlipstreamError.connection('No healthy workers found via discovery');
+    }
+
+    return MultiRegionClient.create(config, workers, mc);
+  }
+
+  /**
+   * Create with explicit worker list (advanced usage).
+   */
   static async create(
     config: SlipstreamConfig,
     workers: WorkerEndpoint[],

@@ -2,6 +2,7 @@
  * @allenhark/slipstream — Configuration builder
  */
 
+import { DEFAULT_DISCOVERY_URL } from './discovery';
 import { SlipstreamError } from './errors';
 import {
   BackoffStrategy,
@@ -12,6 +13,7 @@ import {
 } from './types';
 
 const DEFAULT_CONFIG: Omit<SlipstreamConfig, 'apiKey'> = {
+  discoveryUrl: DEFAULT_DISCOVERY_URL,
   connectionTimeout: 10_000,
   maxRetries: 3,
   leaderHints: true,
@@ -44,6 +46,11 @@ export class ConfigBuilder {
 
   endpoint(url: string): this {
     this.config.endpoint = url;
+    return this;
+  }
+
+  discoveryUrl(url: string): this {
+    this.config.discoveryUrl = url;
     return this;
   }
 
@@ -121,21 +128,27 @@ export function configBuilder(): ConfigBuilder {
 
 /**
  * Get the HTTP base URL from config.
- * Uses explicit endpoint if set, otherwise derives from region.
+ *
+ * If an explicit endpoint is set, uses that.
+ * Otherwise, discovery must be called first to resolve a worker endpoint.
+ * Falls back to discovery URL as a last resort for control plane API calls.
  */
 export function getHttpEndpoint(config: SlipstreamConfig): string {
   if (config.endpoint) {
     return config.endpoint.replace(/\/$/, '');
   }
-  // Default control plane endpoint
-  const region = config.region ?? 'us-east';
-  return `https://${region}.slipstream.allenhark.com`;
+  // When no endpoint is set, use the discovery URL for control plane API calls.
+  // Worker connections are resolved via discovery in client.connect().
+  return config.discoveryUrl.replace(/\/$/, '');
 }
 
 /**
  * Get the WebSocket URL from config.
  */
 export function getWsEndpoint(config: SlipstreamConfig): string {
-  const httpUrl = getHttpEndpoint(config);
-  return httpUrl.replace(/^http/, 'ws') + '/ws';
+  if (config.endpoint) {
+    return config.endpoint.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws';
+  }
+  // Placeholder — real WS endpoint is resolved via discovery
+  return '';
 }

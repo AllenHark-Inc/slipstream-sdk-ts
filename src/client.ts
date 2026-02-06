@@ -28,6 +28,7 @@
 
 import { EventEmitter } from 'events';
 import { getHttpEndpoint, getWsEndpoint } from './config';
+import { discover, bestRegion, workersForRegion } from './discovery';
 import { SlipstreamError } from './errors';
 import { HttpTransport } from './transport/http';
 import { WebSocketTransport } from './transport/websocket';
@@ -99,10 +100,34 @@ export class SlipstreamClient extends EventEmitter {
   /**
    * Connect to Slipstream using the provided configuration.
    *
-   * Establishes a WebSocket connection for streaming and prepares
-   * the HTTP transport for REST API calls.
+   * If no explicit endpoint is set, the SDK automatically discovers
+   * available workers via the discovery service, selects the best
+   * worker, and connects directly to its IP address.
    */
   static async connect(config: SlipstreamConfig): Promise<SlipstreamClient> {
+    // If no explicit endpoint, use discovery to find a worker
+    if (!config.endpoint) {
+      const response = await discover(config.discoveryUrl);
+
+      const region = bestRegion(response, config.region) ?? undefined;
+      if (!region) {
+        throw SlipstreamError.connection('No healthy workers found via discovery');
+      }
+
+      const workers = workersForRegion(response, region);
+      if (workers.length === 0) {
+        throw SlipstreamError.connection(`No healthy workers in region '${region}'`);
+      }
+
+      // Select best worker (first healthy in region)
+      const worker = workers[0];
+      config = {
+        ...config,
+        region,
+        endpoint: `http://${worker.ip}:${worker.ports.http}`,
+      };
+    }
+
     const client = new SlipstreamClient(config);
 
     try {

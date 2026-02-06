@@ -12,6 +12,7 @@ export interface SlipstreamConfig {
   apiKey: string;
   region?: string;
   endpoint?: string;
+  discoveryUrl: string;
   connectionTimeout: number;
   maxRetries: number;
   leaderHints: boolean;
@@ -307,6 +308,32 @@ export interface TipTier {
   name: string;
   amountSol: number;
   expectedLatencyMs: number;
+}
+
+// ============================================================================
+// Discovery
+// ============================================================================
+
+export interface DiscoveryResponse {
+  regions: DiscoveryRegion[];
+  workers: DiscoveryWorker[];
+  recommended_region: string | null;
+}
+
+export interface DiscoveryRegion {
+  id: string;
+  name: string;
+  lat?: number;
+  lon?: number;
+}
+
+export interface DiscoveryWorker {
+  id: string;
+  region: string;
+  ip: string;
+  ports: { quic: number; ws: number; http: number };
+  healthy: boolean;
+  version?: string;
 }
 
 // ============================================================================
