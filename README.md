@@ -23,7 +23,7 @@ The official TypeScript/JavaScript client for **AllenHark Slipstream**, the high
 npm install @allenhark/slipstream
 ```
 
-Requires Node.js 18+. Also works in modern browsers via WebSocket.
+Requires Node.js 23+. Also works in modern browsers via WebSocket.
 
 ## Quick Start
 
