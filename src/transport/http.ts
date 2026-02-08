@@ -8,6 +8,7 @@ import { SlipstreamError } from '../errors';
 import {
   Balance,
   DepositEntry,
+  FreeTierUsage,
   PaginationOptions,
   PendingDeposit,
   RegionInfo,
@@ -215,6 +216,16 @@ export class HttpTransport {
       pendingSol: body.pending_sol as number,
       pendingCount: body.pending_count as number,
       minimumDepositUsd: body.minimum_deposit_usd as number,
+    };
+  }
+
+  async getFreeTierUsage(): Promise<FreeTierUsage> {
+    const body = await this.request<Record<string, unknown>>('GET', '/v1/free-tier-usage');
+    return {
+      used: (body.used as number) ?? 0,
+      remaining: (body.remaining as number) ?? 0,
+      limit: (body.limit as number) ?? 100,
+      resetsAt: (body.resets_at as string) ?? '',
     };
   }
 

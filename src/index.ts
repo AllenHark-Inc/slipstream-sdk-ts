@@ -47,7 +47,9 @@ export { SlipstreamError } from './errors';
 export {
   // Config types
   SlipstreamConfig,
+  BillingTier,
   ProtocolTimeouts,
+  QuicConfig,
   PriorityFeeConfig,
   PriorityFeeSpeed,
   BackoffStrategy,
@@ -80,6 +82,7 @@ export {
   DepositEntry,
   PendingDeposit,
   PaginationOptions,
+  FreeTierUsage,
 
   // Multi-region types
   RoutingRecommendation,

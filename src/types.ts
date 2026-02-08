@@ -8,11 +8,16 @@
 // Configuration
 // ============================================================================
 
+export type BillingTier = 'free' | 'standard' | 'pro' | 'enterprise';
+
 export interface SlipstreamConfig {
   apiKey: string;
   region?: string;
   endpoint?: string;
   discoveryUrl: string;
+  /** Billing tier — determines cost per transaction and rate limits.
+   * Default: 'pro'. Free/Standard=0.00005 SOL, Pro=0.0001 SOL, Enterprise=0.001 SOL per tx. */
+  tier: BillingTier;
   connectionTimeout: number;
   maxRetries: number;
   leaderHints: boolean;
@@ -23,11 +28,24 @@ export interface SlipstreamConfig {
   retryBackoff: BackoffStrategy;
   minConfidence: number;
   idleTimeout?: number;
+  quic?: QuicConfig;
 }
 
 export interface ProtocolTimeouts {
+  quic: number;
   websocket: number;
   http: number;
+}
+
+export interface QuicConfig {
+  /** QUIC connection timeout in milliseconds */
+  timeout: number;
+  /** Keep-alive interval in milliseconds */
+  keepAliveIntervalMs: number;
+  /** Max idle timeout before disconnection in milliseconds */
+  maxIdleTimeoutMs: number;
+  /** Skip TLS certificate verification (development only) */
+  insecure: boolean;
 }
 
 export interface PriorityFeeConfig {
@@ -77,6 +95,7 @@ export enum ConnectionState {
 export interface WorkerEndpoint {
   id: string;
   region: string;
+  quic?: string;
   websocket?: string;
   http?: string;
 }
@@ -236,6 +255,13 @@ export interface PaginationOptions {
   offset?: number;
 }
 
+export interface FreeTierUsage {
+  used: number;
+  remaining: number;
+  limit: number;
+  resetsAt: string;
+}
+
 // ============================================================================
 // Multi-Region Routing
 // ============================================================================
@@ -353,6 +379,7 @@ export interface WsConnectMessage {
   apiKey: string;
   features: string[];
   region?: string;
+  tier?: BillingTier;
 }
 
 export interface WsSubscribeMessage {

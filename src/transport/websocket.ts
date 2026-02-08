@@ -9,6 +9,7 @@ import { EventEmitter } from 'events';
 import WebSocketModule from 'ws';
 import { SlipstreamError } from '../errors';
 import {
+  BillingTier,
   ConnectionInfo,
   LeaderHint,
   PriorityFee,
@@ -31,6 +32,7 @@ export class WebSocketTransport extends EventEmitter {
   private readonly url: string;
   private readonly apiKey: string;
   private readonly region?: string;
+  private readonly tier: BillingTier;
   private ws: WebSocketModule | null = null;
   private connected = false;
   private reconnecting = false;
@@ -43,11 +45,12 @@ export class WebSocketTransport extends EventEmitter {
   private subscribedStreams = new Set<string>();
   private shouldReconnect = true;
 
-  constructor(url: string, apiKey: string, region?: string) {
+  constructor(url: string, apiKey: string, region?: string, tier: BillingTier = 'pro') {
     super();
     this.url = url;
     this.apiKey = apiKey;
     this.region = region;
+    this.tier = tier;
   }
 
   async connect(): Promise<ConnectionInfo> {
@@ -65,6 +68,7 @@ export class WebSocketTransport extends EventEmitter {
             apiKey: this.apiKey,
             features: ['leader_hints', 'tip_instructions', 'priority_fees'],
             region: this.region,
+            tier: this.tier,
           });
         };
 

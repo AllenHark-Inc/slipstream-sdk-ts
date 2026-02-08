@@ -48,6 +48,7 @@ export function workersToEndpoints(workers: DiscoveryWorker[]): WorkerEndpoint[]
     .map((w) => ({
       id: w.id,
       region: w.region,
+      quic: `quic://${w.ip}:${w.ports.quic}`,
       websocket: `ws://${w.ip}:${w.ports.ws}/ws`,
       http: `http://${w.ip}:${w.ports.http}`,
     }));

@@ -31,6 +31,7 @@ import { getHttpEndpoint, getWsEndpoint } from './config';
 import { discover, bestRegion, workersForRegion } from './discovery';
 import { SlipstreamError } from './errors';
 import { HttpTransport } from './transport/http';
+import { QuicTransport } from './transport/quic';
 import { WebSocketTransport } from './transport/websocket';
 import {
   Balance,
@@ -38,6 +39,7 @@ import {
   ConnectionState,
   ConnectionStatus,
   DepositEntry,
+  FreeTierUsage,
   LeaderHint,
   PaginationOptions,
   PendingDeposit,
@@ -56,6 +58,7 @@ export class SlipstreamClient extends EventEmitter {
   private readonly _config: SlipstreamConfig;
   private readonly http: HttpTransport;
   private readonly ws: WebSocketTransport;
+  private quicTransport: QuicTransport | null = null;
   private _connectionInfo: ConnectionInfo | null = null;
   private _connected = false;
   private latestTip: TipInstruction | null = null;
@@ -74,7 +77,7 @@ export class SlipstreamClient extends EventEmitter {
     const wsUrl = getWsEndpoint(config);
 
     this.http = new HttpTransport(httpUrl, config.apiKey, config.protocolTimeouts.http);
-    this.ws = new WebSocketTransport(wsUrl, config.apiKey, config.region);
+    this.ws = new WebSocketTransport(wsUrl, config.apiKey, config.region, config.tier);
 
     // Forward WS events
     this.ws.on('leaderHint', (hint: LeaderHint) => this.emit('leaderHint', hint));
@@ -103,8 +106,14 @@ export class SlipstreamClient extends EventEmitter {
    * If no explicit endpoint is set, the SDK automatically discovers
    * available workers via the discovery service, selects the best
    * worker, and connects directly to its IP address.
+   *
+   * @param config - SDK configuration
+   * @param quicTransport - Optional QUIC transport (provided by the /node entry point)
    */
-  static async connect(config: SlipstreamConfig): Promise<SlipstreamClient> {
+  static async connect(
+    config: SlipstreamConfig,
+    quicTransport?: QuicTransport,
+  ): Promise<SlipstreamClient> {
     // If no explicit endpoint, use discovery to find a worker
     if (!config.endpoint) {
       const response = await discover(config.discoveryUrl);
@@ -129,6 +138,46 @@ export class SlipstreamClient extends EventEmitter {
     }
 
     const client = new SlipstreamClient(config);
+
+    // Try QUIC first if transport provided (server-side)
+    if (quicTransport) {
+      try {
+        const connInfo = await Promise.race([
+          quicTransport.connect(),
+          new Promise<never>((_, reject) =>
+            setTimeout(
+              () => reject(new Error('QUIC timeout')),
+              config.protocolTimeouts.quic ?? 2_000,
+            ),
+          ),
+        ]);
+
+        client.quicTransport = quicTransport;
+        client._connectionInfo = connInfo;
+        client._connected = true;
+
+        // Forward QUIC events
+        quicTransport.on('leaderHint', (hint: LeaderHint) => client.emit('leaderHint', hint));
+        quicTransport.on('tipInstruction', (tip: TipInstruction) => {
+          client.latestTip = tip;
+          client.emit('tipInstruction', tip);
+        });
+        quicTransport.on('priorityFee', (fee: PriorityFee) => client.emit('priorityFee', fee));
+        quicTransport.on('disconnected', () => {
+          client.quicTransport = null;
+          // Fall through to WS if available
+        });
+
+        // Auto-subscribe via QUIC
+        if (config.leaderHints) quicTransport.subscribeLeaderHints();
+        if (config.streamTipInstructions) quicTransport.subscribeTipInstructions();
+        if (config.streamPriorityFees) quicTransport.subscribePriorityFees();
+
+        return client;
+      } catch {
+        // QUIC failed — fall through to WS → HTTP chain
+      }
+    }
 
     try {
       const connInfo = await client.ws.connect();
@@ -182,6 +231,10 @@ export class SlipstreamClient extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    if (this.quicTransport) {
+      await this.quicTransport.disconnect();
+      this.quicTransport = null;
+    }
     await this.ws.disconnect();
     this._connected = false;
   }
@@ -193,7 +246,7 @@ export class SlipstreamClient extends EventEmitter {
   /**
    * Submit a signed transaction.
    *
-   * Prefers WebSocket if connected, falls back to HTTP.
+   * Prefers QUIC if connected, then WebSocket, then HTTP.
    */
   async submitTransaction(
     transaction: Uint8Array | Buffer,
@@ -211,7 +264,9 @@ export class SlipstreamClient extends EventEmitter {
     let result: TransactionResult;
 
     try {
-      if (this.ws.isConnected()) {
+      if (this.quicTransport?.isConnected()) {
+        result = await this.quicTransport.submitTransaction(txBytes, options);
+      } else if (this.ws.isConnected()) {
         result = await this.ws.submitTransaction(txBytes, options);
       } else {
         result = await this.http.submitTransaction(txBytes, options);
@@ -245,7 +300,11 @@ export class SlipstreamClient extends EventEmitter {
    * ```
    */
   async subscribeLeaderHints(): Promise<void> {
-    this.ws.subscribeLeaderHints();
+    if (this.quicTransport?.isConnected()) {
+      this.quicTransport.subscribeLeaderHints();
+    } else {
+      this.ws.subscribeLeaderHints();
+    }
   }
 
   /**
@@ -257,7 +316,11 @@ export class SlipstreamClient extends EventEmitter {
    * ```
    */
   async subscribeTipInstructions(): Promise<void> {
-    this.ws.subscribeTipInstructions();
+    if (this.quicTransport?.isConnected()) {
+      this.quicTransport.subscribeTipInstructions();
+    } else {
+      this.ws.subscribeTipInstructions();
+    }
   }
 
   /**
@@ -269,7 +332,11 @@ export class SlipstreamClient extends EventEmitter {
    * ```
    */
   async subscribePriorityFees(): Promise<void> {
-    this.ws.subscribePriorityFees();
+    if (this.quicTransport?.isConnected()) {
+      this.quicTransport.subscribePriorityFees();
+    } else {
+      this.ws.subscribePriorityFees();
+    }
   }
 
   // ===========================================================================
@@ -326,6 +393,17 @@ export class SlipstreamClient extends EventEmitter {
 
   async getPendingDeposit(): Promise<PendingDeposit> {
     return this.http.getPendingDeposit();
+  }
+
+  /**
+   * Get free tier daily usage statistics.
+   *
+   * Returns the number of transactions used today, remaining quota,
+   * and when the counter resets (UTC midnight).
+   * Only meaningful for keys on the 'free' tier.
+   */
+  async getFreeTierUsage(): Promise<FreeTierUsage> {
+    return this.http.getFreeTierUsage();
   }
 
   /**

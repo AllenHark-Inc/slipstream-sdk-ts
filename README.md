@@ -12,9 +12,11 @@ The official TypeScript/JavaScript client for **AllenHark Slipstream**, the high
 - **Discovery-based connection** -- auto-discovers workers, no manual endpoint configuration
 - **Leader-proximity routing** -- real-time leader hints route transactions to the lowest-latency region
 - **Multi-region support** -- connect to workers across regions, auto-route based on leader schedule
-- **Streaming subscriptions** -- leader hints, tip instructions, priority fees via WebSocket
+- **QUIC transport** -- binary protocol for lowest latency on server-side bots (Node.js)
+- **Streaming subscriptions** -- leader hints, tip instructions, priority fees via QUIC or WebSocket
 - **Token billing** -- check balance, deposit SOL, view usage history
-- **Protocol fallback** -- WebSocket with automatic HTTP fallback
+- **Protocol fallback** -- QUIC → WebSocket → HTTP automatic fallback chain
+- **Dual entry points** -- `@allenhark/slipstream` (browser) and `@allenhark/slipstream/node` (server with QUIC)
 - **Full TypeScript types** -- complete type safety for all API surfaces
 
 ## Installation
@@ -25,7 +27,15 @@ npm install @allenhark/slipstream
 
 Requires Node.js 23+. Also works in modern browsers via WebSocket.
 
+For server-side QUIC support, also install the optional QUIC dependency:
+
+```bash
+npm install @aspect-build/quic
+```
+
 ## Quick Start
+
+### Browser / General (WebSocket + HTTP)
 
 ```typescript
 import { SlipstreamClient, configBuilder } from '@allenhark/slipstream';
@@ -45,6 +55,23 @@ console.log(`Balance: ${balance.balanceTokens} tokens (${balance.balanceSol} SOL
 
 // Clean up
 await client.disconnect();
+```
+
+### Server-Side Bot (QUIC)
+
+For server-side applications that need lowest latency, import from `/node`:
+
+```typescript
+import { SlipstreamClient, configBuilder } from '@allenhark/slipstream/node';
+
+// Automatically uses QUIC if @aspect-build/quic is installed
+// Falls back to WebSocket → HTTP if QUIC unavailable
+const client = await SlipstreamClient.connect(
+  configBuilder().apiKey('sk_live_your_key_here').build()
+);
+
+const result = await client.submitTransaction(signedTxBytes);
+console.log(`Submitted via ${client.connectionStatus().protocol}`); // 'quic'
 ```
 
 ## Configuration
@@ -74,7 +101,10 @@ const config = configBuilder()
 | `leaderHints(bool)` | `boolean` | `true` | Auto-subscribe to leader hint stream |
 | `streamTipInstructions(bool)` | `boolean` | `false` | Auto-subscribe to tip instruction stream |
 | `streamPriorityFees(bool)` | `boolean` | `false` | Auto-subscribe to priority fee stream |
-| `protocolTimeouts(obj)` | `ProtocolTimeouts` | `{ websocket: 3000, http: 5000 }` | Per-protocol timeouts |
+| `streamLatestBlockhash(bool)` | `boolean` | `false` | Auto-subscribe to latest blockhash stream |
+| `streamLatestSlot(bool)` | `boolean` | `false` | Auto-subscribe to latest slot stream |
+| `protocolTimeouts(obj)` | `ProtocolTimeouts` | `{ quic: 2000, websocket: 3000, http: 5000 }` | Per-protocol timeouts |
+| `quicConfig(obj)` | `QuicConfig` | `{ timeout: 2000, keepAliveIntervalMs: 5000, maxIdleTimeoutMs: 30000, insecure: false }` | QUIC transport options (server-side only) |
 | `priorityFee(obj)` | `PriorityFeeConfig` | `{ enabled: false, speed: 'fast' }` | Priority fee configuration |
 | `retryBackoff(strategy)` | `BackoffStrategy` | `Exponential` | Retry backoff strategy (`Linear` or `Exponential`) |
 | `minConfidence(n)` | `number` | `70` | Minimum confidence (0-100) for leader hint routing |
@@ -122,7 +152,9 @@ const result = await client.submitTransactionWithOptions(signedTxBytes, {
 
 ## Streaming
 
-The SDK streams real-time data over WebSocket. Subscribe to events using the `on()` method.
+The SDK streams real-time data over QUIC (server) or WebSocket (browser). Subscribe to events using the `on()` method.
+
+**Billing:** Each stream subscription costs 0.00005 SOL (1 token). If the SDK reconnects within 1 hour for the same stream, no re-billing occurs (reconnect grace period).
 
 ### Leader Hints
 
@@ -169,6 +201,31 @@ client.on('priorityFee', (fee) => {
 });
 
 await client.subscribePriorityFees();
+```
+
+### Latest Blockhash
+
+Streams the latest blockhash every 2 seconds, useful for transaction building without a separate RPC call.
+
+```typescript
+client.on('latestBlockhash', (data) => {
+  console.log(`Blockhash: ${data.blockhash}`);
+  console.log(`Valid until block: ${data.lastValidBlockHeight}`);
+});
+
+await client.subscribeLatestBlockhash();
+```
+
+### Latest Slot
+
+Streams the current confirmed slot on every slot change (~400ms).
+
+```typescript
+client.on('latestSlot', (data) => {
+  console.log(`Current slot: ${data.slot}`);
+});
+
+await client.subscribeLatestSlot();
 ```
 
 ### Transaction Updates
@@ -355,8 +412,8 @@ try {
 
 ```typescript
 // Connection events
-client.on('connected', () => console.log('WebSocket connected'));
-client.on('disconnected', () => console.log('WebSocket disconnected'));
+client.on('connected', () => console.log('Connected'));
+client.on('disconnected', () => console.log('Disconnected'));
 client.on('error', (err) => console.error('Error:', err));
 
 // Check status

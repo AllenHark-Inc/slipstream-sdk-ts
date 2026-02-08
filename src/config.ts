@@ -6,20 +6,24 @@ import { DEFAULT_DISCOVERY_URL } from './discovery';
 import { SlipstreamError } from './errors';
 import {
   BackoffStrategy,
+  BillingTier,
   PriorityFeeConfig,
   PriorityFeeSpeed,
   ProtocolTimeouts,
+  QuicConfig,
   SlipstreamConfig,
 } from './types';
 
 const DEFAULT_CONFIG: Omit<SlipstreamConfig, 'apiKey'> = {
   discoveryUrl: DEFAULT_DISCOVERY_URL,
+  tier: 'pro',
   connectionTimeout: 10_000,
   maxRetries: 3,
   leaderHints: true,
   streamTipInstructions: false,
   streamPriorityFees: false,
   protocolTimeouts: {
+    quic: 2_000,
     websocket: 3_000,
     http: 5_000,
   },
@@ -36,6 +40,15 @@ export class ConfigBuilder {
 
   apiKey(key: string): this {
     this.config.apiKey = key;
+    return this;
+  }
+
+  /** Set the billing tier. Default is 'pro'.
+   * Free/Standard: 0.00005 SOL per tx (5 tps limit).
+   * Pro: 0.0001 SOL per tx (20 tps limit).
+   * Enterprise: 0.001 SOL per tx (100 tps limit). */
+  tier(tier: BillingTier): this {
+    this.config.tier = tier;
     return this;
   }
 
@@ -104,6 +117,11 @@ export class ConfigBuilder {
     return this;
   }
 
+  quicConfig(config: QuicConfig): this {
+    this.config.quic = config;
+    return this;
+  }
+
   build(): SlipstreamConfig {
     if (!this.config.apiKey) {
       throw SlipstreamError.config('apiKey is required');
@@ -140,6 +158,17 @@ export function getHttpEndpoint(config: SlipstreamConfig): string {
   // When no endpoint is set, use the discovery URL for control plane API calls.
   // Worker connections are resolved via discovery in client.connect().
   return config.discoveryUrl.replace(/\/$/, '');
+}
+
+/**
+ * Get the QUIC endpoint URL from config.
+ */
+export function getQuicEndpoint(config: SlipstreamConfig): string {
+  if (config.endpoint) {
+    const url = new URL(config.endpoint);
+    return `quic://${url.hostname}:4433`;
+  }
+  return '';
 }
 
 /**

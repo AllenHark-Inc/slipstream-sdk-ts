@@ -1,13 +1,19 @@
 {
   "name": "@allenhark/slipstream",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Slipstream client SDK for TypeScript/JavaScript - Solana transaction relay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "exports": {
     ".": {
       "require": "./dist/index.js",
+      "import": "./dist/index.js",
       "types": "./dist/index.d.ts"
+    },
+    "./node": {
+      "require": "./dist/node.js",
+      "import": "./dist/node.js",
+      "types": "./dist/node.d.ts"
     }
   },
   "files": [
@@ -30,6 +36,9 @@
     "@solana/web3.js": "^1.87.0",
     "ws": "^8.16.0"
   },
+  "optionalDependencies": {
+    "@aspect-build/quic": "^0.1.0"
+  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "@types/ws": "^8.5.0",
@@ -41,7 +50,7 @@
     "prettier": "^3.0.0"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=23.0.0"
   },
   "license": "Apache-2.0",
   "keywords": [
@@ -50,6 +59,7 @@
     "transaction",
     "relay",
     "blockchain",
-    "web3"
+    "web3",
+    "quic"
   ]
 }
