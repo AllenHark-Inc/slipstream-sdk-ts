@@ -7,6 +7,8 @@
  */
 
 import {
+  LatestBlockhash,
+  LatestSlot,
   LeaderHint,
   PriorityFee,
   TipInstruction,
@@ -24,6 +26,9 @@ export const STREAM_TYPE = {
   TipInstructions: 0x03,
   PriorityFees: 0x04,
   Metrics: 0x05,
+  LatestBlockhash: 0x06,
+  LatestSlot: 0x07,
+  Ping: 0x08,
 } as const;
 
 export type StreamType = (typeof STREAM_TYPE)[keyof typeof STREAM_TYPE];
@@ -215,6 +220,17 @@ export function parseLeaderHint(buf: Buffer): LeaderHint | null {
   const slotsRemaining = buf.readUInt32BE(offset);
   offset += 4;
 
+  // Leader pubkey (length-prefixed)
+  let leaderPubkey = 'unknown';
+  if (buf.length > offset) {
+    const pubkeyLen = buf[offset];
+    offset += 1;
+    if (pubkeyLen > 0 && buf.length >= offset + pubkeyLen) {
+      leaderPubkey = buf.subarray(offset, offset + pubkeyLen).toString('utf-8');
+      offset += pubkeyLen;
+    }
+  }
+
   const timestamp = Number(buf.readBigUInt64BE(offset));
   offset += 8;
 
@@ -227,6 +243,7 @@ export function parseLeaderHint(buf: Buffer): LeaderHint | null {
     preferredRegion: region,
     backupRegions: [],
     confidence,
+    leaderPubkey,
     metadata: {
       tpuRttMs: 0,
       regionScore: confidence,
@@ -339,6 +356,95 @@ export function parsePriorityFee(buf: Buffer): PriorityFee | null {
     networkCongestion: microLamports > 100_000 ? 'high' : microLamports > 10_000 ? 'medium' : 'low',
     recentSuccessRate: sampleCount > 0 ? 0.95 : 0,
   };
+}
+
+/**
+ * Parse a LatestBlockhash from binary wire format.
+ *
+ * Wire format:
+ *   [1 byte stream type (0x06)]
+ *   [1 byte blockhash_len]
+ *   [N bytes blockhash (base58)]
+ *   [8 bytes last_valid_block_height (u64 BE)]
+ *   [8 bytes timestamp (u64 BE)]
+ */
+export function parseLatestBlockhash(buf: Buffer): LatestBlockhash | null {
+  if (buf.length < 1) return null;
+
+  let offset = 0;
+
+  if (buf[0] === STREAM_TYPE.LatestBlockhash) {
+    offset += 1;
+  }
+
+  const hashLen = buf[offset];
+  offset += 1;
+  const blockhash = buf.subarray(offset, offset + hashLen).toString('utf-8');
+  offset += hashLen;
+
+  const lastValidBlockHeight = Number(buf.readBigUInt64BE(offset));
+  offset += 8;
+
+  const timestamp = Number(buf.readBigUInt64BE(offset));
+  offset += 8;
+
+  return { blockhash, lastValidBlockHeight, timestamp };
+}
+
+/**
+ * Parse a LatestSlot from binary wire format.
+ *
+ * Wire format:
+ *   [1 byte stream type (0x07)]
+ *   [8 bytes slot (u64 BE)]
+ *   [8 bytes timestamp (u64 BE)]
+ */
+export function parseLatestSlot(buf: Buffer): LatestSlot | null {
+  if (buf.length < 1) return null;
+
+  let offset = 0;
+
+  if (buf[0] === STREAM_TYPE.LatestSlot) {
+    offset += 1;
+  }
+
+  const slot = Number(buf.readBigUInt64BE(offset));
+  offset += 8;
+
+  const timestamp = Number(buf.readBigUInt64BE(offset));
+  offset += 8;
+
+  return { slot, timestamp };
+}
+
+// ============================================================================
+// Ping / Pong Frames (Keep-Alive + Time Sync)
+// ============================================================================
+
+/**
+ * Build ping frame for time sync.
+ * Wire format: [0x08][4 bytes seq (u32 BE)][8 bytes client_time (u64 BE)]
+ */
+export function buildPingFrame(seq: number, clientTime: number): Buffer {
+  const frame = Buffer.alloc(13);
+  frame[0] = STREAM_TYPE.Ping;
+  frame.writeUInt32BE(seq, 1);
+  frame.writeBigUInt64BE(BigInt(clientTime), 5);
+  return frame;
+}
+
+/**
+ * Parse pong response from server.
+ * Wire format: [0x08][4 bytes seq][8 bytes client_send_time][8 bytes server_time]
+ */
+export function parsePongFrame(buf: Buffer): { seq: number; clientSendTime: number; serverTime: number } | null {
+  if (buf.length < 21) return null;
+  const offset = buf[0] === STREAM_TYPE.Ping ? 1 : 0;
+  if (buf.length < offset + 20) return null;
+  const seq = buf.readUInt32BE(offset);
+  const clientSendTime = Number(buf.readBigUInt64BE(offset + 4));
+  const serverTime = Number(buf.readBigUInt64BE(offset + 12));
+  return { seq, clientSendTime, serverTime };
 }
 
 // ============================================================================

@@ -11,7 +11,10 @@ import { SlipstreamError } from '../errors';
 import {
   BillingTier,
   ConnectionInfo,
+  LatestBlockhash,
+  LatestSlot,
   LeaderHint,
+  PingResult,
   PriorityFee,
   SubmitOptions,
   TipInstruction,
@@ -44,6 +47,8 @@ export class WebSocketTransport extends EventEmitter {
   private requestIdCounter = 0;
   private subscribedStreams = new Set<string>();
   private shouldReconnect = true;
+  private pingSeq = 0;
+  private pendingPing: { resolve: (result: PingResult) => void; reject: (err: Error) => void; clientSendTime: number } | null = null;
 
   constructor(url: string, apiKey: string, region?: string, tier: BillingTier = 'pro') {
     super();
@@ -205,11 +210,54 @@ export class WebSocketTransport extends EventEmitter {
     }
   }
 
+  subscribeLatestBlockhash(): void {
+    this.subscribedStreams.add('latest_blockhash');
+    if (this.connected) {
+      this.sendMessage({ type: 'subscribe', stream: 'latest_blockhash' });
+    }
+  }
+
+  subscribeLatestSlot(): void {
+    this.subscribedStreams.add('latest_slot');
+    if (this.connected) {
+      this.sendMessage({ type: 'subscribe', stream: 'latest_slot' });
+    }
+  }
+
   unsubscribe(stream: string): void {
     this.subscribedStreams.delete(stream);
     if (this.connected) {
       this.sendMessage({ type: 'unsubscribe', stream });
     }
+  }
+
+  // ===========================================================================
+  // Keep-Alive / Time Sync
+  // ===========================================================================
+
+  /**
+   * Send a ping and measure RTT + clock offset.
+   */
+  async ping(): Promise<PingResult> {
+    if (!this.connected) {
+      throw SlipstreamError.notConnected();
+    }
+
+    const seq = this.pingSeq++;
+    const clientSendTime = Date.now();
+
+    return new Promise<PingResult>((resolve, reject) => {
+      this.pendingPing = { resolve, reject, clientSendTime };
+      this.sendMessage({ type: 'ping', seq, client_time: clientSendTime } as unknown as WsClientMessage);
+
+      // Timeout after 5 seconds
+      setTimeout(() => {
+        if (this.pendingPing) {
+          this.pendingPing.reject(SlipstreamError.timeout(5000));
+          this.pendingPing = null;
+        }
+      }, 5000);
+    });
   }
 
   // ===========================================================================
@@ -269,6 +317,14 @@ export class WebSocketTransport extends EventEmitter {
         this.emit('priorityFee', this.parsePriorityFee(msg));
         break;
 
+      case 'latest_blockhash':
+        this.emit('latestBlockhash', this.parseLatestBlockhash(msg));
+        break;
+
+      case 'latest_slot':
+        this.emit('latestSlot', this.parseLatestSlot(msg));
+        break;
+
       case 'transaction_accepted':
       case 'transaction_update':
       case 'transaction_confirmed':
@@ -290,6 +346,23 @@ export class WebSocketTransport extends EventEmitter {
           }
         }
         this.emit('transactionUpdate', this.parseTransactionResult(msg));
+        break;
+      }
+
+      case 'pong': {
+        if (this.pendingPing) {
+          const now = Date.now();
+          const serverTime = (msg.server_time as number) ?? now;
+          const rttMs = now - this.pendingPing.clientSendTime;
+          const clockOffsetMs = serverTime - (this.pendingPing.clientSendTime + Math.floor(rttMs / 2));
+          this.pendingPing.resolve({
+            seq: (msg.seq as number) ?? 0,
+            rttMs,
+            clockOffsetMs,
+            serverTime,
+          });
+          this.pendingPing = null;
+        }
         break;
       }
 
@@ -315,7 +388,7 @@ export class WebSocketTransport extends EventEmitter {
       preferredRegion: msg.preferred_region as string,
       backupRegions: (msg.backup_regions as string[]) ?? [],
       confidence: msg.confidence as number,
-      leaderPubkey: msg.leader_pubkey as string | undefined,
+      leaderPubkey: (msg.leader_pubkey as string) ?? 'unknown',
       metadata: {
         tpuRttMs: (metadata?.tpu_rtt_ms as number) ?? 0,
         regionScore: (metadata?.region_score as number) ?? 0,
@@ -355,6 +428,21 @@ export class WebSocketTransport extends EventEmitter {
       landingProbability: msg.landing_probability as number,
       networkCongestion: msg.network_congestion as string,
       recentSuccessRate: msg.recent_success_rate as number,
+    };
+  }
+
+  private parseLatestBlockhash(msg: WsServerMessage): LatestBlockhash {
+    return {
+      blockhash: msg.blockhash as string,
+      lastValidBlockHeight: msg.last_valid_block_height as number,
+      timestamp: (msg.timestamp as number) ?? Date.now(),
+    };
+  }
+
+  private parseLatestSlot(msg: WsServerMessage): LatestSlot {
+    return {
+      slot: msg.slot as number,
+      timestamp: (msg.timestamp as number) ?? Date.now(),
     };
   }
 
@@ -400,7 +488,7 @@ export class WebSocketTransport extends EventEmitter {
     this.stopHeartbeat();
     this.heartbeatTimer = setInterval(() => {
       if (this.connected) {
-        this.sendMessage({ type: 'pong', timestamp: Date.now() });
+        this.ping().catch(() => {});
       }
     }, 30_000);
   }

@@ -67,6 +67,8 @@ export {
   TipInstruction,
   AlternativeSender,
   PriorityFee,
+  LatestBlockhash,
+  LatestSlot,
 
   // Transaction types
   TransactionResult,

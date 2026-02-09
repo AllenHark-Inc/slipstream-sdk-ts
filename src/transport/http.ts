@@ -241,7 +241,7 @@ export class HttpTransport {
       );
       return {
         bestRegion: body.best_region as string,
-        leaderPubkey: body.leader_pubkey as string | undefined,
+        leaderPubkey: (body.leader_pubkey as string) ?? 'unknown',
         slot: body.slot as number,
         confidence: body.confidence as number,
         expectedRttMs: body.expected_rtt_ms as number | undefined,
@@ -257,6 +257,7 @@ export class HttpTransport {
       ) {
         return {
           bestRegion: 'unknown',
+          leaderPubkey: 'unknown',
           slot: 0,
           confidence: 50,
           fallbackRegions: [],

@@ -23,10 +23,14 @@ export interface SlipstreamConfig {
   leaderHints: boolean;
   streamTipInstructions: boolean;
   streamPriorityFees: boolean;
+  streamLatestBlockhash: boolean;
+  streamLatestSlot: boolean;
   protocolTimeouts: ProtocolTimeouts;
   priorityFee: PriorityFeeConfig;
   retryBackoff: BackoffStrategy;
   minConfidence: number;
+  keepAlive: boolean;
+  keepAliveIntervalMs: number;
   idleTimeout?: number;
   quic?: QuicConfig;
 }
@@ -85,6 +89,13 @@ export interface ConnectionStatus {
   region?: string;
 }
 
+export interface PingResult {
+  seq: number;
+  rttMs: number;
+  clockOffsetMs: number;
+  serverTime: number;
+}
+
 export enum ConnectionState {
   Disconnected = 'disconnected',
   Connecting = 'connecting',
@@ -116,7 +127,7 @@ export interface LeaderHint {
   preferredRegion: string;
   backupRegions: string[];
   confidence: number;
-  leaderPubkey?: string;
+  leaderPubkey: string;
   metadata: LeaderHintMetadata;
 }
 
@@ -155,6 +166,17 @@ export interface PriorityFee {
   landingProbability: number;
   networkCongestion: string;
   recentSuccessRate: number;
+}
+
+export interface LatestBlockhash {
+  blockhash: string;
+  lastValidBlockHeight: number;
+  timestamp: number;
+}
+
+export interface LatestSlot {
+  slot: number;
+  timestamp: number;
 }
 
 // ============================================================================
@@ -268,7 +290,7 @@ export interface FreeTierUsage {
 
 export interface RoutingRecommendation {
   bestRegion: string;
-  leaderPubkey?: string;
+  leaderPubkey: string;
   slot: number;
   confidence: number;
   expectedRttMs?: number;

@@ -22,6 +22,8 @@ const DEFAULT_CONFIG: Omit<SlipstreamConfig, 'apiKey'> = {
   leaderHints: true,
   streamTipInstructions: false,
   streamPriorityFees: false,
+  streamLatestBlockhash: false,
+  streamLatestSlot: false,
   protocolTimeouts: {
     quic: 2_000,
     websocket: 3_000,
@@ -33,6 +35,8 @@ const DEFAULT_CONFIG: Omit<SlipstreamConfig, 'apiKey'> = {
   },
   retryBackoff: BackoffStrategy.Exponential,
   minConfidence: 70,
+  keepAlive: true,
+  keepAliveIntervalMs: 5_000,
 };
 
 export class ConfigBuilder {
@@ -92,6 +96,16 @@ export class ConfigBuilder {
     return this;
   }
 
+  streamLatestBlockhash(enabled: boolean): this {
+    this.config.streamLatestBlockhash = enabled;
+    return this;
+  }
+
+  streamLatestSlot(enabled: boolean): this {
+    this.config.streamLatestSlot = enabled;
+    return this;
+  }
+
   protocolTimeouts(timeouts: ProtocolTimeouts): this {
     this.config.protocolTimeouts = timeouts;
     return this;
@@ -109,6 +123,16 @@ export class ConfigBuilder {
 
   minConfidence(confidence: number): this {
     this.config.minConfidence = confidence;
+    return this;
+  }
+
+  keepAlive(enabled: boolean): this {
+    this.config.keepAlive = enabled;
+    return this;
+  }
+
+  keepAliveInterval(ms: number): this {
+    this.config.keepAliveIntervalMs = ms;
     return this;
   }
 

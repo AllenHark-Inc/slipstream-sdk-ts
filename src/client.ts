@@ -40,10 +40,13 @@ import {
   ConnectionStatus,
   DepositEntry,
   FreeTierUsage,
+  LatestBlockhash,
+  LatestSlot,
   LeaderHint,
   PaginationOptions,
   PendingDeposit,
   PerformanceMetrics,
+  PingResult,
   PriorityFee,
   RoutingRecommendation,
   SlipstreamConfig,
@@ -53,6 +56,55 @@ import {
   TransactionResult,
   UsageEntry,
 } from './types';
+
+class TimeSyncManager {
+  private samples: PingResult[] = [];
+  private readonly maxSamples: number;
+  private timer: ReturnType<typeof setInterval> | null = null;
+
+  constructor(maxSamples = 10) {
+    this.maxSamples = maxSamples;
+  }
+
+  record(result: PingResult): void {
+    this.samples.push(result);
+    if (this.samples.length > this.maxSamples) {
+      this.samples.shift();
+    }
+  }
+
+  medianRttMs(): number | null {
+    if (this.samples.length === 0) return null;
+    const sorted = [...this.samples].map(s => s.rttMs).sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  medianClockOffsetMs(): number | null {
+    if (this.samples.length === 0) return null;
+    const sorted = [...this.samples].map(s => s.clockOffsetMs).sort((a, b) => a - b);
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  start(pingFn: () => Promise<PingResult>, intervalMs: number, onResult?: (r: PingResult) => void): void {
+    this.stop();
+    this.timer = setInterval(async () => {
+      try {
+        const result = await pingFn();
+        this.record(result);
+        onResult?.(result);
+      } catch {
+        // Ping failed — continue trying
+      }
+    }, intervalMs);
+  }
+
+  stop(): void {
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+  }
+}
 
 export class SlipstreamClient extends EventEmitter {
   private readonly _config: SlipstreamConfig;
@@ -86,6 +138,8 @@ export class SlipstreamClient extends EventEmitter {
       this.emit('tipInstruction', tip);
     });
     this.ws.on('priorityFee', (fee: PriorityFee) => this.emit('priorityFee', fee));
+    this.ws.on('latestBlockhash', (data: LatestBlockhash) => this.emit('latestBlockhash', data));
+    this.ws.on('latestSlot', (data: LatestSlot) => this.emit('latestSlot', data));
     this.ws.on('transactionUpdate', (result: TransactionResult) =>
       this.emit('transactionUpdate', result),
     );
@@ -172,6 +226,8 @@ export class SlipstreamClient extends EventEmitter {
         if (config.leaderHints) quicTransport.subscribeLeaderHints();
         if (config.streamTipInstructions) quicTransport.subscribeTipInstructions();
         if (config.streamPriorityFees) quicTransport.subscribePriorityFees();
+        if (config.streamLatestBlockhash) quicTransport.subscribeLatestBlockhash();
+        if (config.streamLatestSlot) quicTransport.subscribeLatestSlot();
 
         return client;
       } catch {
@@ -193,6 +249,12 @@ export class SlipstreamClient extends EventEmitter {
       }
       if (config.streamPriorityFees) {
         client.ws.subscribePriorityFees();
+      }
+      if (config.streamLatestBlockhash) {
+        client.ws.subscribeLatestBlockhash();
+      }
+      if (config.streamLatestSlot) {
+        client.ws.subscribeLatestSlot();
       }
 
       return client;
@@ -336,6 +398,38 @@ export class SlipstreamClient extends EventEmitter {
       this.quicTransport.subscribePriorityFees();
     } else {
       this.ws.subscribePriorityFees();
+    }
+  }
+
+  /**
+   * Subscribe to latest blockhash updates (every 2s).
+   *
+   * Listen for updates:
+   * ```typescript
+   * client.on('latestBlockhash', (data: LatestBlockhash) => { ... });
+   * ```
+   */
+  async subscribeLatestBlockhash(): Promise<void> {
+    if (this.quicTransport?.isConnected()) {
+      this.quicTransport.subscribeLatestBlockhash();
+    } else {
+      this.ws.subscribeLatestBlockhash();
+    }
+  }
+
+  /**
+   * Subscribe to latest slot updates (~400ms on slot change).
+   *
+   * Listen for updates:
+   * ```typescript
+   * client.on('latestSlot', (data: LatestSlot) => { ... });
+   * ```
+   */
+  async subscribeLatestSlot(): Promise<void> {
+    if (this.quicTransport?.isConnected()) {
+      this.quicTransport.subscribeLatestSlot();
+    } else {
+      this.ws.subscribeLatestSlot();
     }
   }
 

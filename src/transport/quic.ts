@@ -18,7 +18,10 @@ import { SlipstreamError } from '../errors';
 import {
   BillingTier,
   ConnectionInfo,
+  LatestBlockhash,
+  LatestSlot,
   LeaderHint,
+  PingResult,
   PriorityFee,
   QuicConfig,
   SubmitOptions,
@@ -27,10 +30,14 @@ import {
 } from '../types';
 import {
   buildAuthFrame,
+  buildPingFrame,
   buildSubscriptionFrame,
   buildTransactionFrame,
   parseAuthResponse,
+  parseLatestBlockhash,
+  parseLatestSlot,
   parseLeaderHint,
+  parsePongFrame,
   parsePriorityFee,
   parseTipInstruction,
   parseTransactionResponse,
@@ -105,6 +112,7 @@ export class QuicTransport extends EventEmitter {
   private subscriptionLoopRunning = false;
   private activeSubscriptions = new Set<StreamType>();
   private requestCounter = 0;
+  private pingSeq = 0;
 
   constructor(host: string, port: number, apiKey: string, region?: string, tier: BillingTier = 'pro', config?: Partial<QuicConfig>) {
     super();
@@ -238,6 +246,20 @@ export class QuicTransport extends EventEmitter {
     this.subscribe(STREAM_TYPE.PriorityFees);
   }
 
+  /**
+   * Subscribe to latest blockhash updates via uni-directional stream.
+   */
+  subscribeLatestBlockhash(): void {
+    this.subscribe(STREAM_TYPE.LatestBlockhash);
+  }
+
+  /**
+   * Subscribe to latest slot updates via uni-directional stream.
+   */
+  subscribeLatestSlot(): void {
+    this.subscribe(STREAM_TYPE.LatestSlot);
+  }
+
   private subscribe(streamType: StreamType): void {
     this.activeSubscriptions.add(streamType);
 
@@ -286,6 +308,41 @@ export class QuicTransport extends EventEmitter {
 
     const responseData = await Promise.race([readPromise, timeoutPromise]);
     return parseTransactionResponse(responseData);
+  }
+
+  // ===========================================================================
+  // Keep-Alive / Time Sync
+  // ===========================================================================
+
+  /**
+   * Send a ping and measure RTT + clock offset.
+   */
+  async ping(): Promise<PingResult> {
+    if (!this._connected || !this.connection) {
+      throw SlipstreamError.notConnected();
+    }
+
+    const seq = this.pingSeq++;
+    const clientSendTime = Date.now();
+
+    const stream = await this.connection.openBidirectionalStream();
+    const frame = buildPingFrame(seq, clientSendTime);
+
+    await stream.writable.write(frame);
+    await stream.writable.finish();
+
+    const responseData = await stream.readable.readAll();
+    const now = Date.now();
+
+    const pong = parsePongFrame(responseData);
+    if (!pong) {
+      throw SlipstreamError.connection('Invalid pong response');
+    }
+
+    const rttMs = now - clientSendTime;
+    const clockOffsetMs = pong.serverTime - (clientSendTime + Math.floor(rttMs / 2));
+
+    return { seq, rttMs, clockOffsetMs, serverTime: pong.serverTime };
   }
 
   // ===========================================================================
@@ -342,6 +399,16 @@ export class QuicTransport extends EventEmitter {
       case STREAM_TYPE.PriorityFees: {
         const fee = parsePriorityFee(data);
         if (fee) this.emit('priorityFee', fee);
+        break;
+      }
+      case STREAM_TYPE.LatestBlockhash: {
+        const bh = parseLatestBlockhash(data);
+        if (bh) this.emit('latestBlockhash', bh);
+        break;
+      }
+      case STREAM_TYPE.LatestSlot: {
+        const slot = parseLatestSlot(data);
+        if (slot) this.emit('latestSlot', slot);
         break;
       }
       default:

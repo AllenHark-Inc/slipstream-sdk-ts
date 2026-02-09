@@ -108,6 +108,8 @@ const config = configBuilder()
 | `priorityFee(obj)` | `PriorityFeeConfig` | `{ enabled: false, speed: 'fast' }` | Priority fee configuration |
 | `retryBackoff(strategy)` | `BackoffStrategy` | `Exponential` | Retry backoff strategy (`Linear` or `Exponential`) |
 | `minConfidence(n)` | `number` | `70` | Minimum confidence (0-100) for leader hint routing |
+| `keepAlive(bool)` | `boolean` | `true` | Enable background keep-alive ping |
+| `keepAliveInterval(ms)` | `number` | `5000` | Keep-alive ping interval in ms |
 | `idleTimeout(ms)` | `number` | none | Disconnect after idle period |
 
 ## Transaction Submission
@@ -238,6 +240,35 @@ client.on('transactionUpdate', (update) => {
   if (update.routing) {
     console.log(`Routed via ${update.routing.region} -> ${update.routing.sender}`);
   }
+});
+```
+
+## Keep-Alive & Time Sync
+
+The SDK includes a background keep-alive mechanism that also provides latency measurement and clock synchronization with the server using NTP-style calculation.
+
+```typescript
+// Enabled by default (5s interval). Configure via:
+const config = configBuilder()
+  .apiKey('sk_live_your_key_here')
+  .keepAlive(true)                // default: true
+  .keepAliveInterval(5000)        // default: 5000ms
+  .build();
+
+const client = await SlipstreamClient.connect(config);
+
+// Manual ping
+const ping = await client.ping();
+console.log(`RTT: ${ping.rttMs}ms, Clock offset: ${ping.clockOffsetMs}ms`);
+
+// Latency (median one-way from sliding window of 10 samples)
+const latency = client.latencyMs();   // number | null
+const offset = client.clockOffsetMs(); // number | null
+const serverNow = client.serverTime(); // number (unix ms)
+
+// Listen for ping events
+client.on('ping', (result) => {
+  console.log(`Ping #${result.seq}: RTT ${result.rttMs}ms`);
 });
 ```
 
