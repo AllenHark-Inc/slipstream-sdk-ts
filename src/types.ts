@@ -33,6 +33,12 @@ export interface SlipstreamConfig {
   keepAliveIntervalMs: number;
   idleTimeout?: number;
   quic?: QuicConfig;
+  /** Webhook URL (HTTPS). If set, SDK auto-registers webhook on connect. */
+  webhookUrl?: string;
+  /** Webhook event types to subscribe to. Default: ['transaction.confirmed'] */
+  webhookEvents?: string[];
+  /** Notification level for transaction events. Default: 'final' */
+  webhookNotificationLevel?: string;
 }
 
 export interface ProtocolTimeouts {
@@ -435,4 +441,43 @@ export interface WsPongMessage {
 export interface WsServerMessage {
   type: string;
   [key: string]: unknown;
+}
+
+// ============================================================================
+// Webhook Types
+// ============================================================================
+
+export enum WebhookEvent {
+  TransactionSent = 'transaction.sent',
+  TransactionConfirmed = 'transaction.confirmed',
+  TransactionFailed = 'transaction.failed',
+  BillingLowBalance = 'billing.low_balance',
+  BillingDepleted = 'billing.depleted',
+  BillingDepositReceived = 'billing.deposit_received',
+}
+
+export enum WebhookNotificationLevel {
+  /** Receive all transaction events (sent + confirmed + failed) */
+  All = 'all',
+  /** Receive only terminal events (confirmed + failed) */
+  Final = 'final',
+  /** Receive only confirmed events */
+  Confirmed = 'confirmed',
+}
+
+export interface WebhookConfig {
+  id: string;
+  url: string;
+  /** Only visible on register/update; masked on GET */
+  secret?: string;
+  events: string[];
+  notificationLevel: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface RegisterWebhookRequest {
+  url: string;
+  events?: string[];
+  notificationLevel?: string;
 }

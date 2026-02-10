@@ -104,6 +104,12 @@ export {
   RegionInfo,
   SenderInfo,
   TipTier,
+
+  // Webhook types
+  WebhookEvent,
+  WebhookNotificationLevel,
+  WebhookConfig,
+  RegisterWebhookRequest,
 } from './types';
 
 // Worker selector (advanced usage)

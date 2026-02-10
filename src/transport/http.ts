@@ -11,6 +11,7 @@ import {
   FreeTierUsage,
   PaginationOptions,
   PendingDeposit,
+  RegisterWebhookRequest,
   RegionInfo,
   RoutingRecommendation,
   SenderInfo,
@@ -18,6 +19,7 @@ import {
   TopUpInfo,
   TransactionResult,
   UsageEntry,
+  WebhookConfig,
   FallbackStrategy,
 } from '../types';
 
@@ -301,5 +303,50 @@ export class HttpTransport {
         expectedLatencyMs: t.expected_latency_ms as number,
       })),
     }));
+  }
+
+  // ===========================================================================
+  // Webhooks
+  // ===========================================================================
+
+  async registerWebhook(req: RegisterWebhookRequest): Promise<WebhookConfig> {
+    const body = await this.request<Record<string, unknown>>('POST', '/v1/webhooks', {
+      url: req.url,
+      events: req.events,
+      notification_level: req.notificationLevel,
+    });
+    return {
+      id: body.id as string,
+      url: body.url as string,
+      secret: body.secret as string | undefined,
+      events: (body.events as string[]) ?? [],
+      notificationLevel: (body.notification_level as string) ?? 'final',
+      isActive: (body.is_active as boolean) ?? true,
+      createdAt: body.created_at as string | undefined,
+    };
+  }
+
+  async getWebhook(): Promise<WebhookConfig | null> {
+    try {
+      const body = await this.request<Record<string, unknown>>('GET', '/v1/webhooks');
+      return {
+        id: body.id as string,
+        url: body.url as string,
+        secret: body.secret as string | undefined,
+        events: (body.events as string[]) ?? [],
+        notificationLevel: (body.notification_level as string) ?? 'final',
+        isActive: (body.is_active as boolean) ?? true,
+        createdAt: body.created_at as string | undefined,
+      };
+    } catch (err) {
+      if (err instanceof SlipstreamError && err.message.includes('404')) {
+        return null;
+      }
+      throw err;
+    }
+  }
+
+  async deleteWebhook(): Promise<void> {
+    await this.request('DELETE', '/v1/webhooks');
   }
 }

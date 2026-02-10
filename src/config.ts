@@ -141,6 +141,24 @@ export class ConfigBuilder {
     return this;
   }
 
+  /** Set webhook URL (HTTPS). If set, SDK auto-registers the webhook on connect. */
+  webhookUrl(url: string): this {
+    this.config.webhookUrl = url;
+    return this;
+  }
+
+  /** Set webhook event types to subscribe to (default: ['transaction.confirmed']) */
+  webhookEvents(events: string[]): this {
+    this.config.webhookEvents = events;
+    return this;
+  }
+
+  /** Set webhook notification level for transaction events (default: 'final') */
+  webhookNotificationLevel(level: string): this {
+    this.config.webhookNotificationLevel = level;
+    return this;
+  }
+
   quicConfig(config: QuicConfig): this {
     this.config.quic = config;
     return this;

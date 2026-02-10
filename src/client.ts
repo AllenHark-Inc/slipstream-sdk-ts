@@ -48,6 +48,7 @@ import {
   PerformanceMetrics,
   PingResult,
   PriorityFee,
+  RegisterWebhookRequest,
   RoutingRecommendation,
   SlipstreamConfig,
   SubmitOptions,
@@ -55,6 +56,7 @@ import {
   TopUpInfo,
   TransactionResult,
   UsageEntry,
+  WebhookConfig,
 } from './types';
 
 class TimeSyncManager {
@@ -229,6 +231,7 @@ export class SlipstreamClient extends EventEmitter {
         if (config.streamLatestBlockhash) quicTransport.subscribeLatestBlockhash();
         if (config.streamLatestSlot) quicTransport.subscribeLatestSlot();
 
+        await client.autoRegisterWebhook();
         return client;
       } catch {
         // QUIC failed — fall through to WS → HTTP chain
@@ -257,6 +260,7 @@ export class SlipstreamClient extends EventEmitter {
         client.ws.subscribeLatestSlot();
       }
 
+      await client.autoRegisterWebhook();
       return client;
     } catch (err) {
       // WebSocket failed — fall back to HTTP-only mode
@@ -269,6 +273,7 @@ export class SlipstreamClient extends EventEmitter {
         rateLimit: { rps: 100, burst: 200 },
       };
       client._connected = true;
+      await client.autoRegisterWebhook();
       return client;
     }
   }
@@ -520,5 +525,56 @@ export class SlipstreamClient extends EventEmitter {
         this.txSubmitted > 0 ? this.totalLatencyMs / this.txSubmitted : 0,
       successRate: this.txSubmitted > 0 ? this.txConfirmed / this.txSubmitted : 0,
     };
+  }
+
+  // ===========================================================================
+  // Webhooks
+  // ===========================================================================
+
+  /**
+   * Register or update a webhook for this API key.
+   *
+   * Returns the webhook configuration including the secret (only visible on register/update).
+   */
+  async registerWebhook(
+    url: string,
+    events?: string[],
+    notificationLevel?: string,
+  ): Promise<WebhookConfig> {
+    const body: RegisterWebhookRequest = { url };
+    if (events) body.events = events;
+    if (notificationLevel) body.notificationLevel = notificationLevel;
+
+    return this.http.registerWebhook(body);
+  }
+
+  /**
+   * Get current webhook configuration for this API key.
+   *
+   * Returns the webhook config with the secret masked, or null if none is configured.
+   */
+  async getWebhook(): Promise<WebhookConfig | null> {
+    return this.http.getWebhook();
+  }
+
+  /**
+   * Delete (disable) the webhook for this API key.
+   */
+  async deleteWebhook(): Promise<void> {
+    return this.http.deleteWebhook();
+  }
+
+  /** @internal Auto-register webhook from config if webhookUrl is set */
+  private async autoRegisterWebhook(): Promise<void> {
+    if (!this._config.webhookUrl) return;
+    try {
+      await this.registerWebhook(
+        this._config.webhookUrl,
+        this._config.webhookEvents ?? ['transaction.confirmed'],
+        this._config.webhookNotificationLevel ?? 'final',
+      );
+    } catch {
+      // Non-fatal — webhook registration can be retried
+    }
   }
 }
