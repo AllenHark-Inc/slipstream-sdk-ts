@@ -76,6 +76,7 @@ export {
   SubmitOptions,
   RoutingInfo,
   TransactionError,
+  BundleResult,
 
   // Token billing types
   Balance,
@@ -110,6 +111,13 @@ export {
   WebhookNotificationLevel,
   WebhookConfig,
   RegisterWebhookRequest,
+
+  // Landing rate types
+  LandingRateStats,
+  LandingRatePeriod,
+  SenderLandingRate,
+  RegionLandingRate,
+  LandingRateOptions,
 } from './types';
 
 // Worker selector (advanced usage)

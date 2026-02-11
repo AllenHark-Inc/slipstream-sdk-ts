@@ -7,8 +7,11 @@
 import { SlipstreamError } from '../errors';
 import {
   Balance,
+  BundleResult,
   DepositEntry,
+  FallbackStrategy,
   FreeTierUsage,
+  LandingRateStats,
   PaginationOptions,
   PendingDeposit,
   RegisterWebhookRequest,
@@ -20,7 +23,6 @@ import {
   TransactionResult,
   UsageEntry,
   WebhookConfig,
-  FallbackStrategy,
 } from '../types';
 
 export class HttpTransport {
@@ -348,5 +350,63 @@ export class HttpTransport {
 
   async deleteWebhook(): Promise<void> {
     await this.request('DELETE', '/v1/webhooks');
+  }
+
+  // ===========================================================================
+  // Landing Rates
+  // ===========================================================================
+
+  async getLandingRates(options?: { start?: string; end?: string }): Promise<LandingRateStats> {
+    const params = new URLSearchParams();
+    if (options?.start) params.set('start', options.start);
+    if (options?.end) params.set('end', options.end);
+    const qs = params.toString();
+    const path = qs ? `/v1/metrics/landing-rates?${qs}` : '/v1/metrics/landing-rates';
+    const body = await this.request<Record<string, unknown>>('GET', path);
+    const period = body.period as { start: string; end: string } | undefined;
+    return {
+      period: { start: period?.start ?? '', end: period?.end ?? '' },
+      totalSent: (body.total_sent as number) ?? 0,
+      totalLanded: (body.total_landed as number) ?? 0,
+      landingRate: (body.landing_rate as number) ?? 0,
+      bySender: ((body.by_sender as any[]) ?? []).map((s: any) => ({
+        sender: s.sender,
+        totalSent: s.total_sent,
+        totalLanded: s.total_landed,
+        landingRate: s.landing_rate,
+      })),
+      byRegion: ((body.by_region as any[]) ?? []).map((r: any) => ({
+        region: r.region,
+        totalSent: r.total_sent,
+        totalLanded: r.total_landed,
+        landingRate: r.landing_rate,
+      })),
+    };
+  }
+
+  // ===========================================================================
+  // Bundle Submission
+  // ===========================================================================
+
+  async submitBundle(
+    transactions: Array<Uint8Array | Buffer>,
+    tipLamports?: number,
+  ): Promise<BundleResult> {
+    const txsBase64 = transactions.map((tx) =>
+      Buffer.from(tx instanceof Uint8Array ? tx : new Uint8Array(tx)).toString('base64'),
+    );
+
+    const body = await this.request<Record<string, unknown>>('POST', '/v1/bundles/submit', {
+      transactions: txsBase64,
+      tip_lamports: tipLamports,
+    });
+
+    return {
+      bundleId: (body.bundle_id as string) ?? '',
+      accepted: (body.accepted as boolean) ?? false,
+      signatures: (body.signatures as string[]) ?? [],
+      senderId: body.sender_id as string | undefined,
+      error: body.error as string | undefined,
+    };
   }
 }

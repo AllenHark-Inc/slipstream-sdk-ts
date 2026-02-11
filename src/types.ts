@@ -234,6 +234,18 @@ export interface TransactionError {
 }
 
 // ============================================================================
+// Bundle
+// ============================================================================
+
+export interface BundleResult {
+  bundleId: string;
+  accepted: boolean;
+  signatures: string[];
+  senderId?: string;
+  error?: string;
+}
+
+// ============================================================================
 // Token Billing
 // ============================================================================
 
@@ -480,4 +492,41 @@ export interface RegisterWebhookRequest {
   url: string;
   events?: string[];
   notificationLevel?: string;
+}
+
+// ============================================================================
+// Landing Rate Types
+// ============================================================================
+
+export interface LandingRateStats {
+  period: LandingRatePeriod;
+  totalSent: number;
+  totalLanded: number;
+  landingRate: number;
+  bySender: SenderLandingRate[];
+  byRegion: RegionLandingRate[];
+}
+
+export interface LandingRatePeriod {
+  start: string;
+  end: string;
+}
+
+export interface SenderLandingRate {
+  sender: string;
+  totalSent: number;
+  totalLanded: number;
+  landingRate: number;
+}
+
+export interface RegionLandingRate {
+  region: string;
+  totalSent: number;
+  totalLanded: number;
+  landingRate: number;
+}
+
+export interface LandingRateOptions {
+  start?: string;
+  end?: string;
 }

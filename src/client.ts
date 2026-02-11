@@ -35,11 +35,14 @@ import { QuicTransport } from './transport/quic';
 import { WebSocketTransport } from './transport/websocket';
 import {
   Balance,
+  BundleResult,
   ConnectionInfo,
   ConnectionState,
   ConnectionStatus,
   DepositEntry,
   FreeTierUsage,
+  LandingRateOptions,
+  LandingRateStats,
   LatestBlockhash,
   LatestSlot,
   LeaderHint,
@@ -562,6 +565,46 @@ export class SlipstreamClient extends EventEmitter {
    */
   async deleteWebhook(): Promise<void> {
     return this.http.deleteWebhook();
+  }
+
+  // ===========================================================================
+  // Landing Rates
+  // ===========================================================================
+
+  /**
+   * Get transaction landing rate statistics for this API key.
+   *
+   * Returns overall landing rate plus per-sender and per-region breakdowns.
+   * Defaults to the last 24 hours if no time range is specified.
+   */
+  async getLandingRates(options?: LandingRateOptions): Promise<LandingRateStats> {
+    return this.http.getLandingRates(options);
+  }
+
+  // ===========================================================================
+  // Bundle Submission
+  // ===========================================================================
+
+  /**
+   * Submit a bundle of transactions for atomic execution.
+   *
+   * Bundles contain 2-5 transactions that are executed atomically — either
+   * all succeed or none. The sender must support bundle submission.
+   *
+   * @param transactions - 2 to 5 signed transactions (Uint8Array or Buffer)
+   * @param tipLamports - Optional tip amount in lamports
+   * @returns Bundle result with bundle ID, acceptance status, and signatures
+   *
+   * Billing: 5 tokens (0.00025 SOL) per bundle regardless of transaction count.
+   */
+  async submitBundle(
+    transactions: Array<Uint8Array | Buffer>,
+    tipLamports?: number,
+  ): Promise<BundleResult> {
+    if (transactions.length < 2 || transactions.length > 5) {
+      throw new SlipstreamError('Bundle must contain 2-5 transactions', 'VALIDATION_ERROR');
+    }
+    return this.http.submitBundle(transactions, tipLamports);
   }
 
   /** @internal Auto-register webhook from config if webhookUrl is set */
