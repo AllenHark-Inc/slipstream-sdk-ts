@@ -74,6 +74,7 @@ export {
   TransactionResult,
   TransactionStatus,
   SubmitOptions,
+  RetryOptions,
   RoutingInfo,
   TransactionError,
   BundleResult,
@@ -118,6 +119,11 @@ export {
   SenderLandingRate,
   RegionLandingRate,
   LandingRateOptions,
+
+  // RPC proxy types
+  RpcResponse,
+  RpcError,
+  SimulationResult,
 } from './types';
 
 // Worker selector (advanced usage)

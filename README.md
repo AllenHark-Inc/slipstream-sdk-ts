@@ -20,6 +20,8 @@ The official TypeScript/JavaScript client for **AllenHark Slipstream**, the high
 - **Keep-alive & time sync** -- background ping with RTT measurement and NTP-style clock synchronization
 - **Protocol fallback** -- QUIC -> WebSocket -> HTTP automatic fallback chain
 - **Dual entry points** -- `@allenhark/slipstream` (browser) and `@allenhark/slipstream/node` (server with QUIC)
+- **Atomic bundles** -- submit 2-5 transactions as a Jito-style atomic bundle
+- **Solana RPC proxy** -- 22 Solana JSON-RPC methods proxied through Slipstream (accounts, transactions, tokens, fees, cluster info)
 - **Full TypeScript types** -- complete type safety for all API surfaces
 
 ## Installation
@@ -305,6 +307,52 @@ const result = await client.submitTransactionWithOptions(signedTxBytes, {
 
 ---
 
+## Atomic Bundles
+
+Submit 2-5 transactions as a Jito-style atomic bundle. All transactions execute sequentially and atomically -- either all land or none do.
+
+### Basic Bundle
+
+```typescript
+const txs = [tx1Bytes, tx2Bytes, tx3Bytes];
+const result = await client.submitBundle(txs);
+console.log(`Bundle ID: ${result.bundleId}`);
+console.log(`Accepted: ${result.accepted}`);
+for (const sig of result.signatures) {
+  console.log(`  Signature: ${sig}`);
+}
+```
+
+### Bundle with Tip
+
+```typescript
+// Explicit tip amount in lamports
+const result = await client.submitBundle(txs, 100_000);
+console.log(`Sender: ${result.senderId}`);
+```
+
+### BundleResult Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bundleId` | `string` | Unique bundle identifier |
+| `accepted` | `boolean` | Whether the bundle was accepted by the sender |
+| `signatures` | `string[]` | Transaction signatures (base58) |
+| `senderId` | `string?` | Sender that processed the bundle |
+| `error` | `string?` | Error message if rejected |
+
+### Bundle Constraints
+
+| Constraint | Value |
+|------------|-------|
+| Min transactions | 2 |
+| Max transactions | 5 |
+| Cost | 5 tokens (0.00025 SOL) flat rate per bundle |
+| Execution | Atomic -- all-or-nothing sequential execution |
+| Sender requirement | Must have `supportsBundles` enabled |
+
+---
+
 ## Streaming
 
 Real-time data feeds over QUIC (binary on server) or WebSocket (browser). Subscribe with `on()`, unsubscribe with `off()`.
@@ -552,13 +600,16 @@ Token-based billing system. Paid tiers (Standard/Pro/Enterprise) deduct tokens p
 | Operation | Cost | Notes |
 |-----------|------|-------|
 | Transaction submission | 1 token (0.00005 SOL) | Per transaction sent to Solana |
+| Bundle submission | 5 tokens (0.00025 SOL) | Per bundle (2-5 transactions, flat rate) |
 | Stream subscription | 1 token (0.00005 SOL) | Per stream type; 1-hour reconnect grace period |
 | Webhook delivery | 0.00001 SOL (10,000 lamports) | Per successful POST delivery; retries not charged |
+| RPC query | 1 token (0.00005 SOL) | Per `rpc()` call (`simulateTransaction`, `getTransaction`, etc.) |
+| Bundle simulation | 1 token per TX (0.00005 SOL each) | `simulateBundle()` calls `simulateTransaction` for each TX |
 | Keep-alive ping | Free | Background ping/pong not billed |
 | Discovery | Free | `GET /v1/discovery` has no auth or billing |
 | Balance/billing queries | Free | `getBalance()`, `getUsageHistory()`, etc. |
 | Webhook management | Free | `registerWebhook()`, `getWebhook()`, `deleteWebhook()` not billed |
-| Free tier daily limit | 100 operations/day | Transactions + stream subs + webhook deliveries all count |
+| Free tier daily limit | 100 operations/day | Transactions + stream subs + webhook deliveries + RPC queries all count |
 
 ### Token Economics
 
@@ -889,6 +940,130 @@ console.log(`Valid for: ${rec.validForMs}ms`);
 | `fallbackRegions` | `string[]` | Fallback regions in priority order |
 | `fallbackStrategy` | `FallbackStrategy` | `'sequential'`, `'broadcast'`, `'retry'`, or `'none'` |
 | `validForMs` | `number` | Time until this recommendation expires (ms) |
+
+---
+
+## Solana RPC Proxy
+
+Slipstream proxies a curated set of Solana JSON-RPC methods through its infrastructure, billed at 1 token per call. This avoids the need for a separate RPC provider for common read operations.
+
+### Generic RPC Call
+
+```typescript
+// Any supported RPC method
+const response = await client.rpc('getLatestBlockhash', [{ commitment: 'confirmed' }]);
+console.log(response.result.value.blockhash);
+
+// Get transaction details
+const txInfo = await client.rpc('getTransaction', [
+  '5K8c...',
+  { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
+]);
+```
+
+### Simulate Transaction
+
+```typescript
+const simulation = await client.simulateTransaction(signedTxBytes);
+if (simulation.err) {
+  console.error('Simulation failed:', simulation.err);
+  console.log('Logs:', simulation.logs);
+} else {
+  console.log('Units consumed:', simulation.unitsConsumed);
+}
+```
+
+### Simulate Bundle
+
+Simulates each transaction in a bundle sequentially. Stops on first failure. Costs 1 token per transaction simulated.
+
+```typescript
+const results = await client.simulateBundle([tx1Bytes, tx2Bytes, tx3Bytes]);
+for (const sim of results) {
+  if (sim.err) {
+    console.error(`TX failed:`, sim.err);
+    break;
+  }
+  console.log(`TX OK — ${sim.unitsConsumed} CUs`);
+}
+```
+
+### Supported RPC Methods
+
+**Network**
+
+| Method | Description |
+|--------|-------------|
+| `getHealth` | Node health status |
+
+**Cluster**
+
+| Method | Description |
+|--------|-------------|
+| `getSlot` | Get current slot |
+| `getBlockHeight` | Get current block height |
+| `getEpochInfo` | Get epoch info (epoch, slot index, slots remaining) |
+| `getSlotLeaders` | Get scheduled slot leaders |
+
+**Fees**
+
+| Method | Description |
+|--------|-------------|
+| `getLatestBlockhash` | Get latest blockhash |
+| `getFeeForMessage` | Get fee for a serialized message |
+| `getRecentPrioritizationFees` | Get recent prioritization fees |
+
+**Accounts**
+
+| Method | Description |
+|--------|-------------|
+| `getAccountInfo` | Get account data |
+| `getMultipleAccounts` | Get multiple accounts in one call |
+| `getBalance` | Get SOL balance of an account |
+| `getMinimumBalanceForRentExemption` | Get minimum balance for rent exemption |
+
+**Tokens**
+
+| Method | Description |
+|--------|-------------|
+| `getTokenAccountBalance` | Get SPL token account balance |
+| `getTokenSupply` | Get token mint supply |
+| `getSupply` | Get total SOL supply |
+| `getTokenLargestAccounts` | Get largest token accounts |
+
+**Transactions**
+
+| Method | Description |
+|--------|-------------|
+| `sendTransaction` | Submit a signed transaction |
+| `simulateTransaction` | Simulate a transaction without submitting |
+| `getSignatureStatuses` | Check status of transaction signatures |
+| `getTransaction` | Get confirmed transaction details |
+
+**Blocks**
+
+| Method | Description |
+|--------|-------------|
+| `getBlockCommitment` | Get block commitment level |
+| `getFirstAvailableBlock` | Get first available block in ledger |
+
+### SimulationResult Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `err` | `object \| null` | Error if simulation failed, `null` on success |
+| `logs` | `string[]` | Program log messages |
+| `unitsConsumed` | `number` | Compute units consumed |
+| `returnData` | `object \| null` | Program return data (if any) |
+
+### RpcResponse Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `jsonrpc` | `string` | Always `"2.0"` |
+| `id` | `number` | Request ID |
+| `result` | `any` | RPC-method-specific result |
+| `error` | `object \| null` | JSON-RPC error (if any) |
 
 ---
 

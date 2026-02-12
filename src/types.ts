@@ -211,12 +211,24 @@ export enum TransactionStatus {
   InsufficientTokens = 'insufficient_tokens',
 }
 
+/** Retry policy options for intelligent retry behavior */
+export interface RetryOptions {
+  /** Maximum number of retry attempts (default: 2) */
+  maxRetries?: number;
+  /** Base backoff delay in milliseconds (default: 100ms, exponential with jitter) */
+  backoffBaseMs?: number;
+  /** Whether to retry with a different sender on failure (default: false) */
+  crossSenderRetry?: boolean;
+}
+
 export interface SubmitOptions {
   broadcastMode?: boolean;
   preferredSender?: string;
   maxRetries?: number;
   timeoutMs?: number;
   dedupId?: string;
+  /** Retry policy (overrides maxRetries with more control) */
+  retry?: RetryOptions;
 }
 
 export interface RoutingInfo {
@@ -529,4 +541,31 @@ export interface RegionLandingRate {
 export interface LandingRateOptions {
   start?: string;
   end?: string;
+}
+
+/** Raw JSON-RPC 2.0 response from the Solana RPC proxy */
+export interface RpcResponse {
+  jsonrpc: string;
+  id: number | string;
+  result?: unknown;
+  error?: RpcError | null;
+}
+
+/** JSON-RPC error object */
+export interface RpcError {
+  code: number;
+  message: string;
+  data?: unknown;
+}
+
+/** Result of simulating a transaction via the RPC proxy */
+export interface SimulationResult {
+  /** Error if simulation failed, null on success */
+  err: unknown | null;
+  /** Program log messages */
+  logs: string[];
+  /** Compute units consumed */
+  unitsConsumed: number;
+  /** Program return data (if any) */
+  returnData?: unknown | null;
 }

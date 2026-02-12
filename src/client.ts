@@ -53,6 +53,8 @@ import {
   PriorityFee,
   RegisterWebhookRequest,
   RoutingRecommendation,
+  RpcResponse,
+  SimulationResult,
   SlipstreamConfig,
   SubmitOptions,
   TipInstruction,
@@ -605,6 +607,64 @@ export class SlipstreamClient extends EventEmitter {
       throw new SlipstreamError('Bundle must contain 2-5 transactions', 'VALIDATION_ERROR');
     }
     return this.http.submitBundle(transactions, tipLamports);
+  }
+
+  // === Solana RPC Proxy ===
+
+  /**
+   * Execute a Solana JSON-RPC call via the Slipstream proxy.
+   *
+   * Costs 1 token (0.00005 SOL) per call. Only methods from the allowlist
+   * are supported (simulateTransaction, getTransaction, getBalance, etc.).
+   */
+  async rpc(method: string, params: unknown[] = []): Promise<RpcResponse> {
+    return this.http.rpc(method, params);
+  }
+
+  /**
+   * Simulate a transaction without submitting it to the network.
+   *
+   * Costs 1 token. Returns simulation result with logs and compute units.
+   */
+  async simulateTransaction(transaction: Uint8Array | Buffer): Promise<SimulationResult> {
+    const txB64 = Buffer.from(transaction).toString('base64');
+    const response = await this.rpc('simulateTransaction', [
+      txB64,
+      { encoding: 'base64', commitment: 'confirmed', replaceRecentBlockhash: true },
+    ]);
+    if (response.error) {
+      throw new SlipstreamError(
+        `RPC error ${response.error.code}: ${response.error.message}`,
+        'RPC_ERROR',
+      );
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const result = response.result as any;
+    const value = result?.value ?? result;
+    return {
+      err: value?.err ?? null,
+      logs: value?.logs ?? [],
+      unitsConsumed: value?.unitsConsumed ?? 0,
+      returnData: value?.returnData ?? null,
+    };
+  }
+
+  /**
+   * Simulate each transaction in a bundle sequentially.
+   *
+   * Costs 1 token per transaction simulated. Stops on first failure.
+   * Returns an array of SimulationResult (one per transaction attempted).
+   */
+  async simulateBundle(
+    transactions: Array<Uint8Array | Buffer>,
+  ): Promise<SimulationResult[]> {
+    const results: SimulationResult[] = [];
+    for (const tx of transactions) {
+      const sim = await this.simulateTransaction(tx);
+      results.push(sim);
+      if (sim.err) break;
+    }
+    return results;
   }
 
   /** @internal Auto-register webhook from config if webhookUrl is set */

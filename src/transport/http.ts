@@ -17,6 +17,7 @@ import {
   RegisterWebhookRequest,
   RegionInfo,
   RoutingRecommendation,
+  RpcResponse,
   SenderInfo,
   SubmitOptions,
   TopUpInfo,
@@ -408,5 +409,15 @@ export class HttpTransport {
       senderId: body.sender_id as string | undefined,
       error: body.error as string | undefined,
     };
+  }
+
+  /** Execute a Solana JSON-RPC call via the Slipstream proxy */
+  async rpc(method: string, params: unknown[] = []): Promise<RpcResponse> {
+    return this.request<RpcResponse>('POST', '/v1/rpc', {
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params,
+    });
   }
 }
