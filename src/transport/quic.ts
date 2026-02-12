@@ -4,8 +4,8 @@
  * High-performance binary transport over QUIC for server-side Node.js.
  * Follows the same EventEmitter pattern as WebSocketTransport.
  *
- * Requires the `@aspect-build/quic` optional dependency.
- * If not installed, the transport will throw on connect().
+ * Requires a QUIC library that implements the QuicLibrary interface.
+ * If no compatible library is available, the transport will throw on connect().
  *
  * Protocol matches the Rust SDK and worker QUIC server exactly:
  * - Authentication via first bi-directional stream
@@ -84,12 +84,12 @@ function loadQuicLib(): QuicLibrary {
   if (quicLib) return quicLib;
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    quicLib = require('@aspect-build/quic') as QuicLibrary;
+    quicLib = require('@aspect-build/slipstream-quic') as QuicLibrary;
     return quicLib;
   } catch {
     throw SlipstreamError.config(
-      'QUIC transport requires the @aspect-build/quic package. ' +
-      'Install it with: npm install @aspect-build/quic',
+      'QUIC transport requires a compatible QUIC library. ' +
+      'QUIC support is currently experimental — use WebSocket or HTTP transport instead.',
     );
   }
 }

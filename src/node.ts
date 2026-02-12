@@ -15,7 +15,7 @@
  * );
  * ```
  *
- * If @aspect-build/quic is not installed, falls back to WebSocket + HTTP
+ * If no QUIC library is available, falls back to WebSocket + HTTP
  * (same as the browser entry point).
  */
 

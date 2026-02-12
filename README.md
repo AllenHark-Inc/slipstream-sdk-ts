@@ -32,12 +32,6 @@ npm install @allenhark/slipstream
 
 Requires Node.js 23+. Also works in modern browsers via WebSocket.
 
-For server-side QUIC support, also install the optional QUIC dependency:
-
-```bash
-npm install @aspect-build/quic
-```
-
 ## Quick Start
 
 ### Browser / General (WebSocket + HTTP)
@@ -63,7 +57,7 @@ await client.disconnect();
 ```typescript
 import { SlipstreamClient, configBuilder } from '@allenhark/slipstream/node';
 
-// Automatically uses QUIC if @aspect-build/quic is installed
+// Automatically uses QUIC when available, otherwise falls back to WebSocket
 const client = await SlipstreamClient.connect(
   configBuilder().apiKey('sk_live_your_key_here').build()
 );
