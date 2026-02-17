@@ -51,6 +51,7 @@ import {
   PerformanceMetrics,
   PingResult,
   PriorityFee,
+  RegionInfo,
   RegisterWebhookRequest,
   RoutingRecommendation,
   RpcResponse,
@@ -473,6 +474,16 @@ export class SlipstreamClient extends EventEmitter {
 
   async getRoutingRecommendation(): Promise<RoutingRecommendation> {
     return this.http.getRoutingRecommendation();
+  }
+
+  /**
+   * Get all configured regions.
+   *
+   * Returns a list of regions with their IDs, display names, endpoints,
+   * and geolocation coordinates. This endpoint does not require authentication.
+   */
+  async getRegions(): Promise<RegionInfo[]> {
+    return this.http.getRegions();
   }
 
   // ===========================================================================
