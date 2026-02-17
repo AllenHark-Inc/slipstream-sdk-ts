@@ -9,7 +9,7 @@
 import { SlipstreamError } from './errors';
 import { DiscoveryResponse, DiscoveryWorker, WorkerEndpoint } from './types';
 
-export const DEFAULT_DISCOVERY_URL = 'https://discovery.slipstream.allenhark.com';
+export const DEFAULT_DISCOVERY_URL = 'https://discovery.allenhark.network';
 
 /**
  * Fetch available workers and regions from the discovery service.

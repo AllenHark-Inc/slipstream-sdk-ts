@@ -37,7 +37,7 @@ async function main() {
   const full = configBuilder()
     .apiKey('sk_live_your_key_here')
     .region('eu-central')
-    .discoveryUrl('https://discovery.slipstream.allenhark.com')
+    .discoveryUrl('https://discovery.allenhark.network')
     .connectionTimeout(15000)
     .maxRetries(5)
     .leaderHints(true)

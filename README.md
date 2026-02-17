@@ -88,7 +88,7 @@ const config = configBuilder()
 | `apiKey(key)` | `string` | **required** | API key (must start with `sk_`) |
 | `region(region)` | `string` | auto | Preferred region (e.g., `'us-east'`, `'eu-central'`) |
 | `endpoint(url)` | `string` | auto | Override discovery with explicit worker endpoint |
-| `discoveryUrl(url)` | `string` | `https://discovery.slipstream.allenhark.com` | Custom discovery service URL |
+| `discoveryUrl(url)` | `string` | `https://discovery.allenhark.network` | Custom discovery service URL |
 | `tier(tier)` | `BillingTier` | `'pro'` | Billing tier: `'free'`, `'standard'`, `'pro'`, `'enterprise'` |
 | `connectionTimeout(ms)` | `number` | `10000` | Connection timeout in milliseconds |
 | `maxRetries(n)` | `number` | `3` | Maximum retry attempts for failed requests |
