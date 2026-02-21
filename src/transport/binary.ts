@@ -264,6 +264,8 @@ export function parseLeaderHint(buf: Buffer): LeaderHint | null {
  *   [1 byte tier_len]
  *   [N bytes tier]
  *   [4 bytes expected_latency_ms (u32 BE)]
+ *   [4 bytes confidence (u32 BE)]
+ *   [8 bytes valid_until_slot (u64 BE)]
  *   [8 bytes timestamp (u64 BE)]
  */
 export function parseTipInstruction(buf: Buffer): TipInstruction | null {
@@ -296,6 +298,12 @@ export function parseTipInstruction(buf: Buffer): TipInstruction | null {
   const expectedLatencyMs = buf.readUInt32BE(offset);
   offset += 4;
 
+  const confidence = buf.readUInt32BE(offset);
+  offset += 4;
+
+  const validUntilSlot = Number(buf.readBigUInt64BE(offset));
+  offset += 8;
+
   const timestamp = Number(buf.readBigUInt64BE(offset));
   offset += 8;
 
@@ -309,8 +317,8 @@ export function parseTipInstruction(buf: Buffer): TipInstruction | null {
     tipAmountSol,
     tipTier: tier,
     expectedLatencyMs,
-    confidence: 100,
-    validUntilSlot: 0,
+    confidence,
+    validUntilSlot,
     alternativeSenders: [],
   };
 }

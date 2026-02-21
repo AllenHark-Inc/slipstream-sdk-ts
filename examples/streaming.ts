@@ -48,10 +48,12 @@ async function main() {
   // Tip instructions: wallet + amount for streaming tip mode
   client.on('tipInstruction', (tip: TipInstruction) => {
     console.log(`[Tip] sender=${tip.senderName} wallet=${tip.tipWalletAddress} ` +
-      `amount=${tip.tipAmountSol} SOL tier=${tip.tipTier}`);
+      `amount=${tip.tipAmountSol} SOL tier=${tip.tipTier} ` +
+      `latency=${tip.expectedLatencyMs}ms confidence=${tip.confidence}% ` +
+      `validUntil=${tip.validUntilSlot}`);
 
     for (const alt of tip.alternativeSenders) {
-      console.log(`  Alt: ${alt.sender} @ ${alt.tipAmountSol} SOL`);
+      console.log(`  Alt: ${alt.sender} @ ${alt.tipAmountSol} SOL (${alt.confidence}%)`);
     }
   });
 
