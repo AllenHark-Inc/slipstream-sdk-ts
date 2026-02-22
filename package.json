@@ -1,6 +1,6 @@
 {
   "name": "@allenhark/slipstream",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Slipstream client SDK for TypeScript/JavaScript - Solana transaction relay",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
