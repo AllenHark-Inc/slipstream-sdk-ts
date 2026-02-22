@@ -116,6 +116,15 @@ export class WebSocketTransport extends EventEmitter {
             return;
           }
 
+          // Auth/protocol error before connection established — reject the promise
+          if (!connectionResolved && msg.type === 'error') {
+            connectionResolved = true;
+            reject(SlipstreamError.auth(
+              (msg.message as string) ?? 'Connection rejected by server',
+            ));
+            return;
+          }
+
           this.handleMessage(msg);
         };
 
