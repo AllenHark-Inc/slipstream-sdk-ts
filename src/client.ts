@@ -192,10 +192,14 @@ export class SlipstreamClient extends EventEmitter {
 
       // Select best worker (first healthy in region)
       const worker = workers[0];
+      // HTTP billing proxy on management port, WebSocket on WS port
+      const httpPort = worker.ports.http ?? 9091;
+      const wsPort = worker.ports.ws ?? httpPort;
       config = {
         ...config,
         region,
-        endpoint: `http://${worker.ip}:${worker.ports.http}`,
+        endpoint: `http://${worker.ip}:${httpPort}`,
+        wsEndpoint: `ws://${worker.ip}:${wsPort}/ws`,
       };
     }
 

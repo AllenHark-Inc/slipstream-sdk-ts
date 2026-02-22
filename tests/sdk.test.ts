@@ -132,10 +132,9 @@ describe('ConfigBuilder', () => {
 describe('Endpoint Helpers', () => {
   const baseConfig = configBuilder().apiKey('sk_test_123').build();
 
-  test('getHttpEndpoint uses discovery URL when no endpoint', () => {
+  test('getHttpEndpoint falls back to localhost when no endpoint', () => {
     const url = getHttpEndpoint(baseConfig);
-    expect(url).not.toBe('');
-    expect(url).not.toMatch(/\/$/);
+    expect(url).toBe('http://localhost:9091');
   });
 
   test('getHttpEndpoint uses explicit endpoint', () => {

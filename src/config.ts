@@ -66,6 +66,13 @@ export class ConfigBuilder {
     return this;
   }
 
+  /** Set the WebSocket endpoint URL explicitly (e.g., ws://ip:9000/ws).
+   * If not set, derived from endpoint or discovery. */
+  wsEndpoint(url: string): this {
+    this.config.wsEndpoint = url;
+    return this;
+  }
+
   discoveryUrl(url: string): this {
     this.config.discoveryUrl = url;
     return this;
@@ -189,17 +196,16 @@ export function configBuilder(): ConfigBuilder {
 /**
  * Get the HTTP base URL from config.
  *
- * If an explicit endpoint is set, uses that.
- * Otherwise, discovery must be called first to resolve a worker endpoint.
- * Falls back to discovery URL as a last resort for control plane API calls.
+ * After discovery, this returns the worker's HTTP management endpoint
+ * which serves billing proxy routes (/v1/balance, etc.) and REST API.
+ * Falls back to localhost:9091 for local development.
  */
 export function getHttpEndpoint(config: SlipstreamConfig): string {
   if (config.endpoint) {
     return config.endpoint.replace(/\/$/, '');
   }
-  // When no endpoint is set, use the discovery URL for control plane API calls.
-  // Worker connections are resolved via discovery in client.connect().
-  return config.discoveryUrl.replace(/\/$/, '');
+  // Fallback for local development (worker management port)
+  return 'http://localhost:9091';
 }
 
 /**
@@ -215,11 +221,16 @@ export function getQuicEndpoint(config: SlipstreamConfig): string {
 
 /**
  * Get the WebSocket URL from config.
+ *
+ * Uses explicit wsEndpoint if set (from discovery with separate WS port),
+ * otherwise derives from the HTTP endpoint.
  */
 export function getWsEndpoint(config: SlipstreamConfig): string {
+  if (config.wsEndpoint) {
+    return config.wsEndpoint;
+  }
   if (config.endpoint) {
     return config.endpoint.replace(/^http/, 'ws').replace(/\/$/, '') + '/ws';
   }
-  // Placeholder — real WS endpoint is resolved via discovery
   return '';
 }

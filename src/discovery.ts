@@ -45,13 +45,17 @@ export async function discover(discoveryUrl: string): Promise<DiscoveryResponse>
 export function workersToEndpoints(workers: DiscoveryWorker[]): WorkerEndpoint[] {
   return workers
     .filter((w) => w.healthy)
-    .map((w) => ({
-      id: w.id,
-      region: w.region,
-      quic: `quic://${w.ip}:${w.ports.quic}`,
-      websocket: `ws://${w.ip}:${w.ports.ws}/ws`,
-      http: `http://${w.ip}:${w.ports.http}`,
-    }));
+    .map((w) => {
+      const httpPort = w.ports.http ?? 9091;
+      const wsPort = w.ports.ws ?? httpPort;
+      return {
+        id: w.id,
+        region: w.region,
+        quic: `quic://${w.ip}:${w.ports.quic}`,
+        websocket: `ws://${w.ip}:${wsPort}/ws`,
+        http: `http://${w.ip}:${httpPort}`,
+      };
+    });
 }
 
 /**

@@ -14,6 +14,8 @@ export interface SlipstreamConfig {
   apiKey: string;
   region?: string;
   endpoint?: string;
+  /** WebSocket endpoint URL (set by discovery, separate from HTTP endpoint) */
+  wsEndpoint?: string;
   discoveryUrl: string;
   /** Billing tier — determines cost per transaction and rate limits.
    * Default: 'pro'. Free/Standard=0.00005 SOL, Pro=0.0001 SOL, Enterprise=0.001 SOL per tx. */
@@ -409,7 +411,7 @@ export interface DiscoveryWorker {
   id: string;
   region: string;
   ip: string;
-  ports: { quic: number; ws: number; http: number };
+  ports: { quic: number; grpc: number; ws: number; http?: number };
   healthy: boolean;
   version?: string;
 }
