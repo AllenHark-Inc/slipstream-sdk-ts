@@ -22,7 +22,7 @@ import type {
   LatestSlot,
 } from '../src/types';
 
-const API_KEY = process.env.SLIPSTREAM_API_KEY ?? 'sk_live_3qvOmzC74v8kkt2CDZJHodNay57cEInH';
+const API_KEY = process.env.SLIPSTREAM_API_KEY ?? 'your_api_key';
 const WORKER_URL = process.env.WORKER_URL ?? 'http://84.32.22.202:9091';
 const WS_URL = process.env.WS_URL ?? 'ws://84.32.22.202:9091/ws';
 const LISTEN_SECONDS = parseInt(process.env.LISTEN_SECONDS ?? '15', 10);
