@@ -133,8 +133,11 @@ export class WebSocketTransport extends EventEmitter {
           if (!connectionResolved) {
             connectionResolved = true;
             reject(SlipstreamError.connection(errMsg));
+          } else {
+            // Only emit 'error' after connection was established;
+            // during connect(), the rejection handles the error.
+            this.emit('error', SlipstreamError.connection(errMsg));
           }
-          this.emit('error', SlipstreamError.connection(errMsg));
         };
 
         const onClose = () => {
