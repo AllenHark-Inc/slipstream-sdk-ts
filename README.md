@@ -301,6 +301,44 @@ const result = await client.submitTransactionWithOptions(signedTxBytes, {
 
 ---
 
+## Sender Discovery
+
+Fetch the list of configured senders with their tip wallets and pricing tiers.
+This is essential for building transactions in both broadcast and streaming modes.
+
+### Get Available Senders
+
+```typescript
+const senders = await client.getSenders();
+
+for (const sender of senders) {
+  console.log(`${sender.displayName} (${sender.senderId})`);
+  console.log(`  Tip wallets: ${sender.tipWallets.join(', ')}`);
+  for (const tier of sender.tipTiers) {
+    console.log(`  ${tier.name}: ${tier.amountSol} SOL (~${tier.expectedLatencyMs}ms)`);
+  }
+}
+```
+
+### SenderInfo Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `senderId` | `string` | Sender identifier (e.g., `'nozomi'`, `'0slot'`) |
+| `displayName` | `string` | Human-readable name |
+| `tipWallets` | `string[]` | Solana wallet addresses for tips |
+| `tipTiers` | `TipTier[]` | Pricing tiers with speed/cost tradeoffs |
+
+### TipTier Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | `string` | Tier name (e.g., `'standard'`, `'fast'`, `'ultra_fast'`) |
+| `amountSol` | `number` | Tip amount in SOL |
+| `expectedLatencyMs` | `number` | Expected submission latency in milliseconds |
+
+---
+
 ## Atomic Bundles
 
 Submit 2-5 transactions as a Jito-style atomic bundle. All transactions execute sequentially and atomically -- either all land or none do.

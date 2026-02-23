@@ -54,6 +54,7 @@ import {
   PriorityFee,
   RegionInfo,
   RegisterWebhookRequest,
+  SenderInfo,
   RoutingRecommendation,
   SimulationResult,
   SlipstreamConfig,
@@ -576,6 +577,17 @@ export class SlipstreamClient extends EventEmitter {
    */
   async getRegions(): Promise<RegionInfo[]> {
     return this.http.getRegions();
+  }
+
+  /**
+   * Get all configured senders with their tip wallets and pricing tiers.
+   *
+   * Essential for building transactions in both broadcast and streaming modes.
+   * Returns sender IDs, display names, tip wallet addresses, and tip tiers
+   * with pricing and expected latency.
+   */
+  async getSenders(): Promise<SenderInfo[]> {
+    return this.http.getSenders();
   }
 
   // ===========================================================================
