@@ -12,14 +12,19 @@ import {
   FallbackStrategy,
   FreeTierUsage,
   LandingRateStats,
+  LatestBlockhash,
+  LatestSlot,
+  LeaderHint,
   PaginationOptions,
   PendingDeposit,
+  PriorityFee,
   RegisterWebhookRequest,
   RegionInfo,
   RoutingRecommendation,
   RpcResponse,
   SenderInfo,
   SubmitOptions,
+  TipInstruction,
   TopUpInfo,
   TransactionResult,
   UsageEntry,
@@ -419,5 +424,136 @@ export class HttpTransport {
       method,
       params,
     });
+  }
+
+  // ===========================================================================
+  // Streaming Data (HTTP polling fallback)
+  // ===========================================================================
+
+  /** Fetch a JSON endpoint, returning null on 204 No Content */
+  private async requestNullable<T>(
+    method: string,
+    path: string,
+  ): Promise<T | null> {
+    const url = `${this.baseUrl}${path}`;
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.timeout);
+
+    try {
+      const response = await fetch(url, {
+        method,
+        headers: {
+          'Authorization': `Bearer ${this.apiKey}`,
+          'Accept': 'application/json',
+        },
+        signal: controller.signal,
+      });
+
+      if (response.status === 204) return null;
+
+      if (response.status === 401) {
+        throw SlipstreamError.auth('Invalid API key');
+      }
+      if (!response.ok) {
+        return null; // Graceful degradation for polling
+      }
+
+      return (await response.json()) as T;
+    } catch (err) {
+      if (err instanceof SlipstreamError) throw err;
+      return null; // Polling failures are non-fatal
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  async getTipInstructions(): Promise<TipInstruction[]> {
+    const raw = await this.requestNullable<Record<string, unknown>[]>(
+      'GET',
+      '/v1/tip-instructions',
+    );
+    if (!raw || !Array.isArray(raw)) return [];
+
+    return raw.map((r) => ({
+      timestamp: (r.timestamp as number) ?? Date.now(),
+      sender: (r.sender_id as string) ?? '',
+      senderName: (r.sender_id as string) ?? '',
+      tipWalletAddress: (r.tip_wallet as string) ?? '',
+      tipAmountSol: ((r.tip_amount_lamports as number) ?? 0) / 1_000_000_000,
+      tipTier: (r.tier as string) ?? 'standard',
+      expectedLatencyMs: (r.expected_latency_ms as number) ?? 0,
+      confidence: (r.confidence as number) ?? 0,
+      validUntilSlot: (r.valid_until_slot as number) ?? 0,
+      alternativeSenders: [],
+    }));
+  }
+
+  async getPriorityFees(): Promise<PriorityFee[]> {
+    const raw = await this.requestNullable<Record<string, unknown>[]>(
+      'GET',
+      '/v1/priority-fees',
+    );
+    if (!raw || !Array.isArray(raw)) return [];
+
+    const speedNames = ['slow', 'fast', 'ultra_fast'];
+    return raw.map((r, i) => ({
+      timestamp: (r.timestamp as number) ?? Date.now(),
+      speed: speedNames[i] ?? 'unknown',
+      computeUnitPrice: (r.micro_lamports_per_cu as number) ?? 0,
+      computeUnitLimit: 200_000,
+      estimatedCostSol: 0,
+      landingProbability: ((r.percentile as number) ?? 0) / 100,
+      networkCongestion: 'normal',
+      recentSuccessRate: 0,
+    }));
+  }
+
+  async getLeaderHint(): Promise<LeaderHint | null> {
+    const raw = await this.requestNullable<Record<string, unknown>>(
+      'GET',
+      '/v1/leader-hint',
+    );
+    if (!raw) return null;
+
+    return {
+      timestamp: (raw.timestamp as number) ?? Date.now(),
+      slot: 0,
+      expiresAtSlot: 0,
+      preferredRegion: (raw.region_id as string) ?? '',
+      backupRegions: [],
+      confidence: (raw.confidence as number) ?? 0,
+      leaderPubkey: (raw.leader_pubkey as string) ?? 'unknown',
+      metadata: {
+        tpuRttMs: 0,
+        regionScore: (raw.confidence as number) ?? 0,
+      },
+    };
+  }
+
+  async getLatestBlockhashData(): Promise<LatestBlockhash | null> {
+    const raw = await this.requestNullable<Record<string, unknown>>(
+      'GET',
+      '/v1/latest-blockhash',
+    );
+    if (!raw) return null;
+
+    return {
+      blockhash: (raw.blockhash as string) ?? '',
+      lastValidBlockHeight: (raw.lastValidBlockHeight as number) ?? 0,
+      timestamp: Date.now(),
+    };
+  }
+
+  async getLatestSlotData(): Promise<LatestSlot | null> {
+    const raw = await this.requestNullable<Record<string, unknown>>(
+      'GET',
+      '/v1/latest-slot',
+    );
+    if (!raw) return null;
+
+    return {
+      slot: (raw.slot as number) ?? 0,
+      timestamp: (raw.timestamp as number) ?? Date.now(),
+    };
   }
 }

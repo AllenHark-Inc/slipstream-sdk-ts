@@ -125,6 +125,7 @@ export class SlipstreamClient extends EventEmitter {
   private _connectionInfo: ConnectionInfo | null = null;
   private _connected = false;
   private latestTip: TipInstruction | null = null;
+  private pollingTimers: ReturnType<typeof setInterval>[] = [];
 
   // Metrics
   private txSubmitted = 0;
@@ -277,7 +278,7 @@ export class SlipstreamClient extends EventEmitter {
       await client.autoRegisterWebhook();
       return client;
     } catch (err) {
-      // WebSocket failed — fall back to HTTP-only mode
+      // WebSocket failed — fall back to HTTP-only mode with polling
       client._connectionInfo = {
         sessionId: '',
         protocol: 'http',
@@ -287,6 +288,14 @@ export class SlipstreamClient extends EventEmitter {
         rateLimit: { rps: 100, burst: 200 },
       };
       client._connected = true;
+
+      // Start HTTP polling for any configured stream subscriptions
+      if (config.leaderHints) client.startPolling('leaderHint');
+      if (config.streamTipInstructions) client.startPolling('tipInstruction');
+      if (config.streamPriorityFees) client.startPolling('priorityFee');
+      if (config.streamLatestBlockhash) client.startPolling('latestBlockhash');
+      if (config.streamLatestSlot) client.startPolling('latestSlot');
+
       await client.autoRegisterWebhook();
       return client;
     }
@@ -312,6 +321,10 @@ export class SlipstreamClient extends EventEmitter {
   }
 
   async disconnect(): Promise<void> {
+    // Stop all HTTP polling timers
+    this.pollingTimers.forEach((t) => clearInterval(t));
+    this.pollingTimers = [];
+
     if (this.quicTransport) {
       await this.quicTransport.disconnect();
       this.quicTransport = null;
@@ -383,8 +396,10 @@ export class SlipstreamClient extends EventEmitter {
   async subscribeLeaderHints(): Promise<void> {
     if (this.quicTransport?.isConnected()) {
       this.quicTransport.subscribeLeaderHints();
-    } else {
+    } else if (this.ws.isConnected()) {
       this.ws.subscribeLeaderHints();
+    } else {
+      this.startPolling('leaderHint');
     }
   }
 
@@ -399,8 +414,10 @@ export class SlipstreamClient extends EventEmitter {
   async subscribeTipInstructions(): Promise<void> {
     if (this.quicTransport?.isConnected()) {
       this.quicTransport.subscribeTipInstructions();
-    } else {
+    } else if (this.ws.isConnected()) {
       this.ws.subscribeTipInstructions();
+    } else {
+      this.startPolling('tipInstruction');
     }
   }
 
@@ -415,8 +432,10 @@ export class SlipstreamClient extends EventEmitter {
   async subscribePriorityFees(): Promise<void> {
     if (this.quicTransport?.isConnected()) {
       this.quicTransport.subscribePriorityFees();
-    } else {
+    } else if (this.ws.isConnected()) {
       this.ws.subscribePriorityFees();
+    } else {
+      this.startPolling('priorityFee');
     }
   }
 
@@ -431,8 +450,10 @@ export class SlipstreamClient extends EventEmitter {
   async subscribeLatestBlockhash(): Promise<void> {
     if (this.quicTransport?.isConnected()) {
       this.quicTransport.subscribeLatestBlockhash();
-    } else {
+    } else if (this.ws.isConnected()) {
       this.ws.subscribeLatestBlockhash();
+    } else {
+      this.startPolling('latestBlockhash');
     }
   }
 
@@ -447,9 +468,72 @@ export class SlipstreamClient extends EventEmitter {
   async subscribeLatestSlot(): Promise<void> {
     if (this.quicTransport?.isConnected()) {
       this.quicTransport.subscribeLatestSlot();
-    } else {
+    } else if (this.ws.isConnected()) {
       this.ws.subscribeLatestSlot();
+    } else {
+      this.startPolling('latestSlot');
     }
+  }
+
+  // ===========================================================================
+  // HTTP Polling (fallback when QUIC and WebSocket are unavailable)
+  // ===========================================================================
+
+  private isHttpOnly(): boolean {
+    return this._connectionInfo?.protocol === 'http';
+  }
+
+  private startPolling(type: string): void {
+    const intervals: Record<string, number> = {
+      leaderHint: 2000,
+      tipInstruction: 5000,
+      priorityFee: 5000,
+      latestBlockhash: 2000,
+      latestSlot: 2000,
+    };
+    const ms = intervals[type] ?? 5000;
+
+    const poll = async () => {
+      try {
+        switch (type) {
+          case 'leaderHint': {
+            const hint = await this.http.getLeaderHint();
+            if (hint) this.emit('leaderHint', hint);
+            break;
+          }
+          case 'tipInstruction': {
+            const tips = await this.http.getTipInstructions();
+            for (const tip of tips) {
+              this.latestTip = tip;
+              this.emit('tipInstruction', tip);
+            }
+            break;
+          }
+          case 'priorityFee': {
+            const fees = await this.http.getPriorityFees();
+            for (const fee of fees) this.emit('priorityFee', fee);
+            break;
+          }
+          case 'latestBlockhash': {
+            const bh = await this.http.getLatestBlockhashData();
+            if (bh) this.emit('latestBlockhash', bh);
+            break;
+          }
+          case 'latestSlot': {
+            const slot = await this.http.getLatestSlotData();
+            if (slot) this.emit('latestSlot', slot);
+            break;
+          }
+        }
+      } catch {
+        // Polling errors are non-fatal — continue
+      }
+    };
+
+    // Initial fetch so first value is available immediately
+    poll();
+    const timer = setInterval(poll, ms);
+    this.pollingTimers.push(timer);
   }
 
   // ===========================================================================
