@@ -942,20 +942,44 @@ console.log(`Valid for: ${rec.validForMs}ms`);
 
 ## Solana RPC Proxy
 
-Slipstream proxies a curated set of Solana JSON-RPC methods through its infrastructure, billed at 1 token per call. This avoids the need for a separate RPC provider for common read operations.
+Slipstream proxies a curated set of Solana JSON-RPC methods through its infrastructure, billed at 1 token per call. The `client.rpc` property provides a fully typed interface -- no need for a separate RPC provider for common read operations.
 
-### Generic RPC Call
+### Typed Methods
+
+Every supported Solana RPC method has a typed wrapper on `client.rpc`:
 
 ```typescript
-// Any supported RPC method
-const response = await client.rpc('getLatestBlockhash', [{ commitment: 'confirmed' }]);
-console.log(response.result.value.blockhash);
+// Cluster info
+const slot = await client.rpc.getSlot();
+const height = await client.rpc.getBlockHeight();
+const epoch = await client.rpc.getEpochInfo();
 
-// Get transaction details
-const txInfo = await client.rpc('getTransaction', [
-  '5K8c...',
-  { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 },
-]);
+// Fees & blockhash
+const bh = await client.rpc.getLatestBlockhash();
+console.log(`Blockhash: ${bh.value.blockhash}`);
+const fees = await client.rpc.getRecentPrioritizationFees();
+
+// Account data
+const lamports = await client.rpc.getBalance('So11111111111111111111111111111111');
+const acct = await client.rpc.getAccountInfo(pubkey, { encoding: 'base64' });
+const accounts = await client.rpc.getMultipleAccounts([pk1, pk2]);
+
+// Tokens
+const tokenBal = await client.rpc.getTokenAccountBalance(tokenAccount);
+const supply = await client.rpc.getTokenSupply(mintAddress);
+
+// Transactions
+const statuses = await client.rpc.getSignatureStatuses([sig1, sig2]);
+const tx = await client.rpc.getTransaction(sig, { maxSupportedTransactionVersion: 0 });
+```
+
+### Generic Escape Hatch
+
+For any method not covered by the typed wrappers, use `client.rpc.call()`:
+
+```typescript
+const response = await client.rpc.call('getVersion', []);
+console.log(response.result);
 ```
 
 ### Simulate Transaction
@@ -985,64 +1009,70 @@ for (const sim of results) {
 }
 ```
 
-### Supported RPC Methods
+### Typed Method Reference
 
 **Network**
 
-| Method | Description |
-|--------|-------------|
-| `getHealth` | Node health status |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `getHealth()` | `() => string` | `"ok"` |
 
 **Cluster**
 
-| Method | Description |
-|--------|-------------|
-| `getSlot` | Get current slot |
-| `getBlockHeight` | Get current block height |
-| `getEpochInfo` | Get epoch info (epoch, slot index, slots remaining) |
-| `getSlotLeaders` | Get scheduled slot leaders |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `getSlot()` | `(commitment?) => number` | Current slot |
+| `getBlockHeight()` | `(commitment?) => number` | Current block height |
+| `getEpochInfo()` | `(commitment?) => SolanaEpochInfo` | Epoch details |
+| `getSlotLeaders()` | `(startSlot, limit) => string[]` | Leader pubkeys |
 
 **Fees**
 
-| Method | Description |
-|--------|-------------|
-| `getLatestBlockhash` | Get latest blockhash |
-| `getFeeForMessage` | Get fee for a serialized message |
-| `getRecentPrioritizationFees` | Get recent prioritization fees |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `getLatestBlockhash()` | `(commitment?) => SolanaLatestBlockhash` | `{ value: { blockhash, lastValidBlockHeight } }` |
+| `getFeeForMessage()` | `(message, commitment?) => number \| null` | Lamports or null |
+| `getRecentPrioritizationFees()` | `(accounts?) => SolanaPrioritizationFee[]` | `[{ slot, prioritizationFee }]` |
 
 **Accounts**
 
-| Method | Description |
-|--------|-------------|
-| `getAccountInfo` | Get account data |
-| `getMultipleAccounts` | Get multiple accounts in one call |
-| `getBalance` | Get SOL balance of an account |
-| `getMinimumBalanceForRentExemption` | Get minimum balance for rent exemption |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `getAccountInfo()` | `(pubkey, opts?) => SolanaAccountInfo` | Account data or null value |
+| `getMultipleAccounts()` | `(pubkeys, opts?) => { value: [] }` | Array of account data |
+| `getBalance()` | `(pubkey, commitment?) => number` | Lamports (unwrapped) |
+| `getMinimumBalanceForRentExemption()` | `(dataSize, commitment?) => number` | Lamports |
 
 **Tokens**
 
-| Method | Description |
-|--------|-------------|
-| `getTokenAccountBalance` | Get SPL token account balance |
-| `getTokenSupply` | Get token mint supply |
-| `getSupply` | Get total SOL supply |
-| `getTokenLargestAccounts` | Get largest token accounts |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `getTokenAccountBalance()` | `(pubkey, commitment?) => SolanaTokenBalance` | Token balance with decimals |
+| `getTokenSupply()` | `(mint, commitment?) => SolanaTokenBalance` | Token supply |
+| `getSupply()` | `(commitment?) => SolanaSupply` | SOL supply breakdown |
+| `getTokenLargestAccounts()` | `(mint, commitment?) => SolanaTokenLargestAccount[]` | Top 20 holders |
 
 **Transactions**
 
-| Method | Description |
-|--------|-------------|
-| `sendTransaction` | Submit a signed transaction |
-| `simulateTransaction` | Simulate a transaction without submitting |
-| `getSignatureStatuses` | Check status of transaction signatures |
-| `getTransaction` | Get confirmed transaction details |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `sendTransaction()` | `(tx, opts?) => string` | Signature |
+| `simulateTransaction()` | `(tx, opts?) => SimulationResult` | Logs, CUs, errors |
+| `getSignatureStatuses()` | `(sigs, opts?) => { value: [] }` | Status per signature |
+| `getTransaction()` | `(sig, opts?) => unknown` | Full transaction data |
 
 **Blocks**
 
-| Method | Description |
-|--------|-------------|
-| `getBlockCommitment` | Get block commitment level |
-| `getFirstAvailableBlock` | Get first available block in ledger |
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `getBlockCommitment()` | `(slot) => SolanaBlockCommitment` | Commitment + total stake |
+| `getFirstAvailableBlock()` | `() => number` | First available slot |
+
+**Escape Hatch**
+
+| Method | Signature | Returns |
+|--------|-----------|---------|
+| `call()` | `(method, params?) => RpcResponse` | Raw JSON-RPC response |
 
 ### SimulationResult Fields
 
