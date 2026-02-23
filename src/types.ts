@@ -563,6 +563,60 @@ export interface RpcError {
   data?: unknown;
 }
 
+// ============================================================================
+// Solana RPC Response Types
+// ============================================================================
+
+export interface SolanaAccountInfo {
+  value: { data: unknown; executable: boolean; lamports: number; owner: string; rentEpoch: number } | null;
+}
+
+export interface SolanaEpochInfo {
+  epoch: number;
+  slotIndex: number;
+  slotsInEpoch: number;
+  absoluteSlot: number;
+  blockHeight: number;
+  transactionCount?: number;
+}
+
+export interface SolanaBlockCommitment {
+  commitment: number[] | null;
+  totalStake: number;
+}
+
+export interface SolanaSignatureStatus {
+  slot: number;
+  confirmations: number | null;
+  err: unknown | null;
+  confirmationStatus: string | null;
+}
+
+export interface SolanaTokenBalance {
+  value: { amount: string; decimals: number; uiAmount: number | null; uiAmountString: string };
+}
+
+export interface SolanaSupply {
+  value: { total: number; circulating: number; nonCirculating: number; nonCirculatingAccounts: string[] };
+}
+
+export interface SolanaTokenLargestAccount {
+  address: string;
+  amount: string;
+  decimals: number;
+  uiAmount: number | null;
+  uiAmountString: string;
+}
+
+export interface SolanaLatestBlockhash {
+  value: { blockhash: string; lastValidBlockHeight: number };
+}
+
+export interface SolanaPrioritizationFee {
+  slot: number;
+  prioritizationFee: number;
+}
+
 /** Result of simulating a transaction via the RPC proxy */
 export interface SimulationResult {
   /** Error if simulation failed, null on success */

@@ -40,6 +40,9 @@ export { ConfigBuilder, configBuilder } from './config';
 // Discovery
 export { discover, DEFAULT_DISCOVERY_URL } from './discovery';
 
+// Typed Solana RPC
+export { SolanaRpc } from './rpc';
+
 // Error types
 export { SlipstreamError } from './errors';
 
@@ -124,6 +127,17 @@ export {
   RpcResponse,
   RpcError,
   SimulationResult,
+
+  // Solana RPC response types
+  SolanaAccountInfo,
+  SolanaEpochInfo,
+  SolanaBlockCommitment,
+  SolanaSignatureStatus,
+  SolanaTokenBalance,
+  SolanaSupply,
+  SolanaTokenLargestAccount,
+  SolanaLatestBlockhash,
+  SolanaPrioritizationFee,
 } from './types';
 
 // Worker selector (advanced usage)

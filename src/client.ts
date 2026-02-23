@@ -30,6 +30,7 @@ import { EventEmitter } from 'events';
 import { getHttpEndpoint, getWsEndpoint } from './config';
 import { discover, bestRegion, workersForRegion } from './discovery';
 import { SlipstreamError } from './errors';
+import { SolanaRpc } from './rpc';
 import { HttpTransport } from './transport/http';
 import { QuicTransport } from './transport/quic';
 import { WebSocketTransport } from './transport/websocket';
@@ -54,7 +55,6 @@ import {
   RegionInfo,
   RegisterWebhookRequest,
   RoutingRecommendation,
-  RpcResponse,
   SimulationResult,
   SlipstreamConfig,
   SubmitOptions,
@@ -118,6 +118,9 @@ export class SlipstreamClient extends EventEmitter {
   private readonly _config: SlipstreamConfig;
   private readonly http: HttpTransport;
   private readonly ws: WebSocketTransport;
+
+  /** Typed Solana RPC interface. Use `client.rpc.getSlot()`, `client.rpc.getBalance(pubkey)`, etc. */
+  readonly rpc: SolanaRpc;
   private quicTransport: QuicTransport | null = null;
   private _connectionInfo: ConnectionInfo | null = null;
   private _connected = false;
@@ -138,6 +141,7 @@ export class SlipstreamClient extends EventEmitter {
 
     this.http = new HttpTransport(httpUrl, config.apiKey, config.protocolTimeouts.http);
     this.ws = new WebSocketTransport(wsUrl, config.apiKey, config.region, config.tier);
+    this.rpc = new SolanaRpc((method, params) => this.http.rpc(method, params));
 
     // Forward WS events
     this.ws.on('leaderHint', (hint: LeaderHint) => this.emit('leaderHint', hint));
@@ -627,41 +631,17 @@ export class SlipstreamClient extends EventEmitter {
   // === Solana RPC Proxy ===
 
   /**
-   * Execute a Solana JSON-RPC call via the Slipstream proxy.
-   *
-   * Costs 1 token (0.00005 SOL) per call. Only methods from the allowlist
-   * are supported (simulateTransaction, getTransaction, getBalance, etc.).
-   */
-  async rpc(method: string, params: unknown[] = []): Promise<RpcResponse> {
-    return this.http.rpc(method, params);
-  }
-
-  /**
    * Simulate a transaction without submitting it to the network.
    *
    * Costs 1 token. Returns simulation result with logs and compute units.
    */
   async simulateTransaction(transaction: Uint8Array | Buffer): Promise<SimulationResult> {
     const txB64 = Buffer.from(transaction).toString('base64');
-    const response = await this.rpc('simulateTransaction', [
-      txB64,
-      { encoding: 'base64', commitment: 'confirmed', replaceRecentBlockhash: true },
-    ]);
-    if (response.error) {
-      throw new SlipstreamError(
-        `RPC error ${response.error.code}: ${response.error.message}`,
-        'RPC_ERROR',
-      );
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const result = response.result as any;
-    const value = result?.value ?? result;
-    return {
-      err: value?.err ?? null,
-      logs: value?.logs ?? [],
-      unitsConsumed: value?.unitsConsumed ?? 0,
-      returnData: value?.returnData ?? null,
-    };
+    return this.rpc.simulateTransaction(txB64, {
+      encoding: 'base64',
+      commitment: 'confirmed',
+      replaceRecentBlockhash: true,
+    });
   }
 
   /**
