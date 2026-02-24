@@ -197,6 +197,14 @@ export interface TransactionResult {
   signature?: string;
   status: TransactionStatus;
   slot?: number;
+  /** Slot when transaction was sent to the sender */
+  slotSent?: number;
+  /** Slot when the sender acknowledged acceptance */
+  slotAccepted?: number;
+  /** Slot where transaction landed on-chain (if confirmed) */
+  slotLanded?: number;
+  /** Difference between landed slot and sent slot */
+  slotDelta?: number;
   timestamp: number;
   routing?: RoutingInfo;
   error?: TransactionError;

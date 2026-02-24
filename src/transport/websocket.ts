@@ -337,7 +337,13 @@ export class WebSocketTransport extends EventEmitter {
         this.emit('latestSlot', this.parseLatestSlot(msg));
         break;
 
-      case 'transaction_accepted':
+      case 'transaction_accepted': {
+        // Ack only — do NOT resolve the pending promise; wait for a
+        // terminal message (update/confirmed/failed) that carries data.
+        this.emit('transactionUpdate', this.parseTransactionResult(msg));
+        break;
+      }
+
       case 'transaction_update':
       case 'transaction_confirmed':
       case 'transaction_failed': {
@@ -461,20 +467,33 @@ export class WebSocketTransport extends EventEmitter {
   private parseTransactionResult(msg: WsServerMessage): TransactionResult {
     const routing = msg.routing as Record<string, unknown> | undefined;
     const error = msg.error as Record<string, unknown> | undefined;
+
+    const slotSent = (msg.slot_sent as number | undefined) ?? undefined;
+    const slotLanded = msg.type === 'transaction_confirmed' ? (msg.slot as number | undefined) : undefined;
+    const slotDelta =
+      slotSent != null && slotLanded != null && slotLanded >= slotSent
+        ? slotLanded - slotSent
+        : undefined;
+
     return {
       requestId: (msg.request_id as string) ?? '',
       transactionId: (msg.transaction_id as string) ?? '',
       signature: msg.signature as string | undefined,
       status: (msg.status as TransactionResult['status']) ?? 'pending',
       slot: msg.slot as number | undefined,
+      slotSent,
+      slotAccepted: (msg.slot_accepted as number | undefined) ?? undefined,
+      slotLanded,
+      slotDelta,
       timestamp: (msg.timestamp as number) ?? Date.now(),
       routing: routing
         ? {
-            region: routing.region as string,
-            sender: routing.sender as string,
-            routingLatencyMs: routing.routing_latency_ms as number,
-            senderLatencyMs: routing.sender_latency_ms as number,
-            totalLatencyMs: routing.total_latency_ms as number,
+            // Worker sends `region`/`sender`, CP sends `selected_region`/`selected_sender`
+            region: (routing.region ?? routing.selected_region) as string,
+            sender: (routing.sender ?? routing.selected_sender) as string,
+            routingLatencyMs: (routing.routing_latency_ms as number) ?? 0,
+            senderLatencyMs: (routing.sender_latency_ms as number) ?? 0,
+            totalLatencyMs: (routing.total_latency_ms as number) ?? 0,
           }
         : undefined,
       error: error

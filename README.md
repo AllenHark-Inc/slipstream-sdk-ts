@@ -1236,6 +1236,12 @@ try {
 | [`priority-fees.ts`](./examples/priority-fees.ts) | Priority fee configuration and streaming |
 | [`deduplication.ts`](./examples/deduplication.ts) | Deduplication patterns |
 
+## Contact
+
+- Website: https://allenhark.com
+- Contact: https://allenhark.com/contact
+- Discord: https://discord.gg/JpzS72MAKG
+
 ## License
 
 Apache-2.0
