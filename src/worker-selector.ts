@@ -137,7 +137,7 @@ export class WorkerSelector {
     const timer = setTimeout(() => controller.abort(), this.pingTimeoutMs);
 
     try {
-      await fetch(`${endpoint}/management/health`, {
+      await fetch(`${endpoint}/health`, {
         method: 'HEAD',
         signal: controller.signal,
       });
