@@ -617,6 +617,26 @@ export class SlipstreamClient extends EventEmitter {
   }
 
   // ===========================================================================
+  // Ping / Time Sync
+  // ===========================================================================
+
+  /**
+   * Send a ping and measure round-trip time and clock offset.
+   *
+   * Uses QUIC if connected, otherwise WebSocket.
+   * Throws if neither transport is available.
+   */
+  async ping(): Promise<PingResult> {
+    if (this.quicTransport?.isConnected()) {
+      return this.quicTransport.ping();
+    }
+    if (this.ws.isConnected()) {
+      return this.ws.ping();
+    }
+    throw SlipstreamError.notConnected();
+  }
+
+  // ===========================================================================
   // Connection Status
   // ===========================================================================
 
