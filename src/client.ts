@@ -285,7 +285,7 @@ export class SlipstreamClient extends EventEmitter {
         if (config.streamLatestBlockhash) quicTransport.subscribeLatestBlockhash();
         if (config.streamLatestSlot) quicTransport.subscribeLatestSlot();
 
-        await client.autoRegisterWebhook();
+        await Promise.all([client.autoRegisterWebhook(), client.fetchInitialTip()]);
         return client;
       } catch {
         // QUIC failed — fall through to WS → HTTP chain
@@ -293,7 +293,16 @@ export class SlipstreamClient extends EventEmitter {
     }
 
     try {
-      const connInfo = await client.ws.connect();
+      const wsTimeout = config.protocolTimeouts.websocket ?? 3_000;
+      const connInfo = await Promise.race([
+        client.ws.connect(),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error('WebSocket timeout')),
+            wsTimeout,
+          ),
+        ),
+      ]);
       client._connectionInfo = connInfo;
       client._connected = true;
 
@@ -314,10 +323,16 @@ export class SlipstreamClient extends EventEmitter {
         client.ws.subscribeLatestSlot();
       }
 
-      await client.autoRegisterWebhook();
+      await Promise.all([client.autoRegisterWebhook(), client.fetchInitialTip()]);
       return client;
     } catch (err) {
       // WebSocket failed — fall back to HTTP-only mode with polling
+      const wsErr = err instanceof Error ? err.message : String(err);
+      console.warn(`[slipstream] WebSocket connection failed (${wsErr}), falling back to HTTP polling`);
+
+      // Clean up the WS transport so it doesn't keep reconnecting in background
+      client.ws.disconnect().catch(() => {});
+
       client._connectionInfo = {
         sessionId: '',
         protocol: 'http',
@@ -335,7 +350,7 @@ export class SlipstreamClient extends EventEmitter {
       if (config.streamLatestBlockhash) client.startPolling('latestBlockhash');
       if (config.streamLatestSlot) client.startPolling('latestSlot');
 
-      await client.autoRegisterWebhook();
+      await Promise.all([client.autoRegisterWebhook(), client.fetchInitialTip()]);
       return client;
     }
   }
@@ -578,6 +593,21 @@ export class SlipstreamClient extends EventEmitter {
   // ===========================================================================
   // Tip Caching
   // ===========================================================================
+
+  /**
+   * Eagerly fetch tip instructions from the HTTP endpoint so
+   * getLatestTip() is populated immediately after connect().
+   */
+  private async fetchInitialTip(): Promise<void> {
+    try {
+      const tips = await this.http.getTipInstructions();
+      if (tips.length > 0) {
+        this.latestTip = tips[tips.length - 1];
+      }
+    } catch {
+      // Non-fatal — tip will be populated by streaming later
+    }
+  }
 
   /**
    * Get the most recently received tip instruction (cached).

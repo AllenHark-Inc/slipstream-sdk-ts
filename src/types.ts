@@ -405,6 +405,8 @@ export interface DiscoveryRegion {
   name: string;
   lat?: number;
   lon?: number;
+  /** Best worker-to-leader RTT in this region (ms), if known */
+  leader_rtt_ms?: number;
 }
 
 export interface DiscoveryWorker {
