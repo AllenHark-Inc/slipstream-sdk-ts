@@ -28,8 +28,9 @@
 
 import { EventEmitter } from 'events';
 import { getHttpEndpoint, getWsEndpoint } from './config';
-import { discover, bestRegion, workersForRegion } from './discovery';
+import { discover, bestRegion, workersForRegion, workersToEndpoints } from './discovery';
 import { SlipstreamError } from './errors';
+import { WorkerSelector } from './worker-selector';
 import { SolanaRpc } from './rpc';
 import { HttpTransport } from './transport/http';
 import { QuicTransport } from './transport/quic';
@@ -196,19 +197,56 @@ export class SlipstreamClient extends EventEmitter {
         throw SlipstreamError.connection(`No healthy workers in region '${region}'`);
       }
 
-      // Select best worker (first healthy in region)
-      const worker = workers[0];
-      // HTTP billing proxy on management port, WebSocket on WS port
-      const httpPort = worker.ports.http ?? 9091;
-      const wsPort = worker.ports.ws ?? httpPort;
-      config = {
-        ...config,
-        region,
-        endpoint: `http://${worker.ip}:${httpPort}`,
-        wsEndpoint: `ws://${worker.ip}:${wsPort}/ws`,
-      };
+      // Convert to endpoints and rank by latency
+      const endpoints = workersToEndpoints(workers);
+      const selector = new WorkerSelector(endpoints);
+      const rtts = await selector.measureAll();
+
+      // Sort by RTT (lowest first), unreachable at end
+      const ranked = [...endpoints].sort((a, b) => {
+        const rttA = rtts.get(a.id) ?? Infinity;
+        const rttB = rtts.get(b.id) ?? Infinity;
+        return rttA - rttB;
+      });
+
+      // Try workers in latency order — fall to next on complete failure
+      let lastError: Error | null = null;
+      for (let i = 0; i < ranked.length; i++) {
+        const worker = ranked[i];
+        const workerConfig: SlipstreamConfig = {
+          ...config,
+          region,
+          endpoint: worker.http,
+          wsEndpoint: worker.websocket,
+        };
+
+        try {
+          const client = await SlipstreamClient.tryConnect(workerConfig, quicTransport);
+          return client;
+        } catch (err) {
+          lastError = err as Error;
+          // Try next worker
+        }
+      }
+
+      throw lastError ?? SlipstreamError.connection(
+        `All workers in region '${region}' rejected connection`,
+      );
     }
 
+    // Explicit endpoint set — connect directly
+    return SlipstreamClient.tryConnect(config, quicTransport);
+  }
+
+  /**
+   * Attempt connection to a single worker endpoint using the full protocol
+   * fallback chain: QUIC → WebSocket → HTTP.
+   * @internal
+   */
+  private static async tryConnect(
+    config: SlipstreamConfig,
+    quicTransport?: QuicTransport,
+  ): Promise<SlipstreamClient> {
     const client = new SlipstreamClient(config);
 
     // Try QUIC first if transport provided (server-side)
