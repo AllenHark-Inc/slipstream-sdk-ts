@@ -23,6 +23,7 @@ The official TypeScript/JavaScript client for **AllenHark Slipstream**, the high
 - **Atomic bundles** -- submit 2-5 transactions as a Jito-style atomic bundle
 - **Solana RPC proxy** -- 22 Solana JSON-RPC methods proxied through Slipstream (accounts, transactions, tokens, fees, cluster info)
 - **Full TypeScript types** -- complete type safety for all API surfaces
+- **TPU submission** -- send transactions directly to validator TPU ports via UDP, bypassing senders (0.0001 SOL per TX)
 
 ## Installation
 
@@ -262,6 +263,7 @@ const result = await client.submitTransactionWithOptions(signedTxBytes, {
 | `maxRetries` | `number` | `2` | Retry attempts on failure |
 | `timeoutMs` | `number` | `30000` | Timeout per attempt in milliseconds |
 | `dedupId` | `string` | none | Custom deduplication ID (prevents double-submit) |
+| `tpuSubmission` | `boolean` | `false` | Send directly to validator TPU ports via UDP (bypasses senders, 0.0001 SOL per TX) |
 
 ### TransactionResult Fields
 
@@ -298,6 +300,20 @@ const result = await client.submitTransactionWithOptions(signedTxBytes, {
 | `routingLatencyMs` | `number` | Time spent in routing logic (ms) |
 | `senderLatencyMs` | `number` | Time spent in sender submission (ms) |
 | `totalLatencyMs` | `number` | Total end-to-end latency (ms) |
+
+### TPU Submission
+
+Send transactions directly to Solana validator TPU ports via UDP, bypassing external sender services. Targets the current leader + next 3 leaders for redundancy. Fire-and-forget -- no sender acknowledgment, but transactions are still tracked by signature for confirmation polling.
+
+```typescript
+const result = await client.submitTransaction(txBytes, {
+  tpuSubmission: true,
+});
+console.log(`Signature: ${result.signature}`);
+// Use standard confirmation polling to check landing
+```
+
+**TPU submission billing:** 0.0001 SOL (100,000 lamports) per transaction -- separate from standard sender-based billing.
 
 ---
 
@@ -632,6 +648,7 @@ Token-based billing system. Paid tiers (Standard/Pro/Enterprise) deduct tokens p
 | Operation | Cost | Notes |
 |-----------|------|-------|
 | Transaction submission | 1 token (0.00005 SOL) | Per transaction sent to Solana |
+| TPU submission | 0.0001 SOL (100,000 lamports) | Direct to validator TPU ports, bypasses senders |
 | Bundle submission | 5 tokens (0.00025 SOL) | Per bundle (2-5 transactions, flat rate) |
 | Stream subscription | 1 token (0.00005 SOL) | Per stream type; 1-hour reconnect grace period |
 | Webhook delivery | 0.00001 SOL (10,000 lamports) | Per successful POST delivery; retries not charged |

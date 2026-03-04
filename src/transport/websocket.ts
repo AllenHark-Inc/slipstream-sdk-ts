@@ -306,6 +306,7 @@ export class WebSocketTransport extends EventEmitter {
           preferredSender: options.preferredSender,
           maxRetries: options.maxRetries,
           timeoutMs: options.timeoutMs,
+          tpuSubmission: options.tpuSubmission,
         },
       });
     });

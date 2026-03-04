@@ -125,6 +125,7 @@ export class HttpTransport {
         preferred_sender: options.preferredSender,
         max_retries: options.maxRetries ?? 2,
         timeout_ms: options.timeoutMs ?? 30_000,
+        tpu_submission: options.tpuSubmission ?? false,
       },
     });
   }

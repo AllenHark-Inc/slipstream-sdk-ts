@@ -239,6 +239,12 @@ export interface SubmitOptions {
   dedupId?: string;
   /** Retry policy (overrides maxRetries with more control) */
   retry?: RetryOptions;
+  /**
+   * Send directly to validator TPU ports via UDP (bypasses senders).
+   * Billed at 0.0001 SOL per transaction. Fire-and-forget — no sender
+   * acknowledgment. Use standard confirmation polling to check landing.
+   */
+  tpuSubmission?: boolean;
 }
 
 export interface RoutingInfo {
@@ -466,6 +472,7 @@ export interface WsSubmitTransactionMessage {
     preferredSender?: string;
     maxRetries?: number;
     timeoutMs?: number;
+    tpuSubmission?: boolean;
   };
 }
 
