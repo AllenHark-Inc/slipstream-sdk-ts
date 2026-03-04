@@ -205,6 +205,16 @@ export interface TransactionResult {
   slotLanded?: number;
   /** Difference between landed slot and sent slot */
   slotDelta?: number;
+  /** Solana commitment level: "processed" | "confirmed" | "finalized" */
+  commitmentLevel?: string;
+  /** Number of cluster confirmations (null once finalized) */
+  confirmations?: number;
+  /** Slot at which transaction reached "processed" commitment */
+  slotProcessed?: number;
+  /** Slot at which transaction reached "confirmed" commitment */
+  slotConfirmed?: number;
+  /** Slot at which transaction reached "finalized" commitment */
+  slotFinalized?: number;
   timestamp: number;
   routing?: RoutingInfo;
   error?: TransactionError;

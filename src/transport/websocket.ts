@@ -486,6 +486,11 @@ export class WebSocketTransport extends EventEmitter {
       slotAccepted: (msg.slot_accepted as number | undefined) ?? undefined,
       slotLanded,
       slotDelta,
+      commitmentLevel: (msg.commitment_level as string | undefined) ?? undefined,
+      confirmations: (msg.confirmations as number | undefined) ?? undefined,
+      slotProcessed: (msg.slot_processed as number | undefined) ?? undefined,
+      slotConfirmed: (msg.slot_confirmed as number | undefined) ?? undefined,
+      slotFinalized: (msg.slot_finalized as number | undefined) ?? undefined,
       timestamp: (msg.timestamp as number) ?? Date.now(),
       routing: routing
         ? {
