@@ -141,11 +141,18 @@ export function parseAuthResponse(buf: Buffer): AuthResponse {
  *   [64 bytes signature (if has_signature)]
  *   [2 bytes error_len (u16 BE)]
  *   [N bytes error message]
+ *   [1 byte sender_len + N bytes sender]
+ *   [1 byte region_len + N bytes region]
+ *   [1 byte slot_sent flag + 8 bytes u64 BE (if flag=1)]
+ *   [1 byte slot_accepted flag + 8 bytes u64 BE (if flag=1)]
+ *   [4 bytes latency_ms (u32 BE)]
+ *   [4 bytes sender_latency_ms (u32 BE)]
  */
 export function parseTransactionResponse(buf: Buffer): TransactionResult {
   let offset = 0;
+  const n = buf.length;
 
-  const requestId = buf.readUInt32BE(offset);
+  const _requestId = buf.readUInt32BE(offset);
   offset += 4;
 
   const statusByte = buf[offset];
@@ -168,16 +175,81 @@ export function parseTransactionResponse(buf: Buffer): TransactionResult {
   if (errLen > 0) {
     const errMsg = buf.subarray(offset, offset + errLen).toString('utf-8');
     error = { code: 'SENDER_ERROR', message: errMsg };
+    offset += errLen;
   }
+
+  // Parse sender ID (length-prefixed u8)
+  let sender: string | undefined;
+  if (n > offset) {
+    const senderLen = buf[offset];
+    offset += 1;
+    if (senderLen > 0 && n >= offset + senderLen) {
+      sender = buf.subarray(offset, offset + senderLen).toString('utf-8');
+      offset += senderLen;
+    }
+  }
+
+  // Parse region (length-prefixed u8)
+  let region: string | undefined;
+  if (n > offset) {
+    const regionLen = buf[offset];
+    offset += 1;
+    if (regionLen > 0 && n >= offset + regionLen) {
+      region = buf.subarray(offset, offset + regionLen).toString('utf-8');
+      offset += regionLen;
+    }
+  }
+
+  // Parse slot_sent (flag + u64 BE)
+  let slotSent: number | undefined;
+  if (n > offset && buf[offset] === 1) {
+    offset += 1;
+    if (n >= offset + 8) {
+      slotSent = Number(buf.readBigUInt64BE(offset));
+      offset += 8;
+    }
+  } else if (n > offset) {
+    offset += 1;
+  }
+
+  // Parse slot_accepted (flag + u64 BE)
+  let slotAccepted: number | undefined;
+  if (n > offset && buf[offset] === 1) {
+    offset += 1;
+    if (n >= offset + 8) {
+      slotAccepted = Number(buf.readBigUInt64BE(offset));
+      offset += 8;
+    }
+  } else if (n > offset) {
+    offset += 1;
+  }
+
+  // Parse latency fields (u32 BE each)
+  let totalLatencyMs = 0;
+  let senderLatencyMs = 0;
+  if (n >= offset + 8) {
+    totalLatencyMs = buf.readUInt32BE(offset);
+    senderLatencyMs = buf.readUInt32BE(offset + 4);
+  }
+  const routingLatencyMs = totalLatencyMs - senderLatencyMs;
 
   const status = STATUS_MAP[statusByte] ?? TransactionStatus.Failed;
 
   return {
-    requestId: `req_${requestId}`,
-    transactionId: signature ?? `tx_${requestId}`,
+    requestId: crypto.randomUUID(),
+    transactionId: crypto.randomUUID(),
     signature,
     status,
     timestamp: Date.now(),
+    slotSent,
+    slotAccepted,
+    routing: (sender || region || totalLatencyMs > 0) ? {
+      region: region ?? '',
+      sender: sender ?? '',
+      routingLatencyMs,
+      senderLatencyMs,
+      totalLatencyMs,
+    } : undefined,
     error,
   };
 }
