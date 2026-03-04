@@ -284,7 +284,7 @@ export class WebSocketTransport extends EventEmitter {
       throw SlipstreamError.notConnected();
     }
 
-    const requestId = `req_${++this.requestIdCounter}_${Date.now()}`;
+    const requestId = crypto.randomUUID();
     const base64Tx = Buffer.from(transaction).toString('base64');
 
     return new Promise<TransactionResult>((resolve, reject) => {
