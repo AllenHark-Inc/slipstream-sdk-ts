@@ -412,11 +412,10 @@ describe('Type Structures', () => {
       retry: {
         maxRetries: 3,
         backoffBaseMs: 200,
-        crossSenderRetry: true,
       },
     };
     expect(opts.broadcastMode).toBe(true);
-    expect(opts.retry!.crossSenderRetry).toBe(true);
+    expect(opts.retry!.maxRetries).toBe(3);
   });
 
   test('BundleResult shape', () => {

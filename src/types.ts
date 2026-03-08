@@ -237,8 +237,6 @@ export interface RetryOptions {
   maxRetries?: number;
   /** Base backoff delay in milliseconds (default: 100ms, exponential with jitter) */
   backoffBaseMs?: number;
-  /** Whether to retry with a different sender on failure (default: false) */
-  crossSenderRetry?: boolean;
 }
 
 export interface SubmitOptions {
