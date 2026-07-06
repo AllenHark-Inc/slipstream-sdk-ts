@@ -376,17 +376,17 @@ export class HttpTransport {
       totalSent: (body.total_sent as number) ?? 0,
       totalLanded: (body.total_landed as number) ?? 0,
       landingRate: (body.landing_rate as number) ?? 0,
-      bySender: ((body.by_sender as any[]) ?? []).map((s: any) => ({
-        sender: s.sender,
-        totalSent: s.total_sent,
-        totalLanded: s.total_landed,
-        landingRate: s.landing_rate,
+      bySender: ((body.by_sender as Array<Record<string, unknown>>) ?? []).map((s) => ({
+        sender: s.sender as string,
+        totalSent: s.total_sent as number,
+        totalLanded: s.total_landed as number,
+        landingRate: s.landing_rate as number,
       })),
-      byRegion: ((body.by_region as any[]) ?? []).map((r: any) => ({
-        region: r.region,
-        totalSent: r.total_sent,
-        totalLanded: r.total_landed,
-        landingRate: r.landing_rate,
+      byRegion: ((body.by_region as Array<Record<string, unknown>>) ?? []).map((r) => ({
+        region: r.region as string,
+        totalSent: r.total_sent as number,
+        totalLanded: r.total_landed as number,
+        landingRate: r.landing_rate as number,
       })),
     };
   }
