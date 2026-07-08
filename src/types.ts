@@ -117,6 +117,12 @@ export interface WorkerEndpoint {
   quic?: string;
   websocket?: string;
   http?: string;
+  /** Legacy QUIC endpoint advertised during a port migration; absent on old control planes. */
+  legacyQuic?: string;
+  /** Legacy gRPC endpoint advertised during a port migration; absent on old control planes. */
+  legacyGrpc?: string;
+  /** Legacy WebSocket endpoint advertised during a port migration; absent on old control planes. */
+  legacyWebsocket?: string;
 }
 
 export interface RateLimitInfo {
@@ -435,7 +441,18 @@ export interface DiscoveryWorker {
   id: string;
   region: string;
   ip: string;
-  ports: { quic: number; grpc: number; ws: number; http?: number };
+  ports: {
+    quic: number;
+    grpc: number;
+    ws: number;
+    http?: number;
+    /** Legacy QUIC port advertised during a port migration; absent on old control planes. */
+    legacy_quic?: number;
+    /** Legacy gRPC port advertised during a port migration; absent on old control planes. */
+    legacy_grpc?: number;
+    /** Legacy WebSocket port advertised during a port migration; absent on old control planes. */
+    legacy_ws?: number;
+  };
   healthy: boolean;
   version?: string;
 }

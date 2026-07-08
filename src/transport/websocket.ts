@@ -22,6 +22,7 @@ import {
   WsClientMessage,
   WsServerMessage,
 } from '../types';
+import { tryTargets } from './fallback';
 
 const VERSION = '0.1.0';
 
@@ -33,6 +34,12 @@ interface PendingRequest {
 
 export class WebSocketTransport extends EventEmitter {
   private readonly url: string;
+  /**
+   * Legacy WebSocket endpoint advertised by the worker during a port
+   * migration. Absent on old control planes / workers with no active
+   * migration.
+   */
+  private readonly legacyUrl?: string;
   private readonly apiKey: string;
   private readonly region?: string;
   private readonly tier: BillingTier;
@@ -50,19 +57,37 @@ export class WebSocketTransport extends EventEmitter {
   private pingSeq = 0;
   private pendingPing: { resolve: (result: PingResult) => void; reject: (err: Error) => void; clientSendTime: number } | null = null;
 
-  constructor(url: string, apiKey: string, region?: string, tier: BillingTier = 'pro') {
+  constructor(url: string, apiKey: string, region?: string, tier: BillingTier = 'pro', legacyUrl?: string) {
     super();
     this.url = url;
+    this.legacyUrl = legacyUrl;
     this.apiKey = apiKey;
     this.region = region;
     this.tier = tier;
   }
 
+  /**
+   * Connect to the worker's WebSocket endpoint and authenticate.
+   *
+   * Prefers the primary URL; falls back ONCE to the legacy URL (if the
+   * worker advertises one) when the primary attempt fails with a
+   * connect/transport error. A successful primary connect never attempts
+   * the legacy URL. No legacy URL ⇒ single attempt, unchanged behavior.
+   */
   async connect(): Promise<ConnectionInfo> {
+    const targets =
+      this.legacyUrl !== undefined && this.legacyUrl !== this.url
+        ? [this.url, this.legacyUrl]
+        : [this.url];
+
+    return tryTargets(targets, (target) => this.connectToUrl(target));
+  }
+
+  private async connectToUrl(url: string): Promise<ConnectionInfo> {
     return new Promise((resolve, reject) => {
       try {
         // Use ws package (Node.js)
-        this.ws = new WebSocketModule(this.url);
+        this.ws = new WebSocketModule(url);
 
         let connectionResolved = false;
 

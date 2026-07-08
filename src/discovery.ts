@@ -48,14 +48,60 @@ export function workersToEndpoints(workers: DiscoveryWorker[]): WorkerEndpoint[]
     .map((w) => {
       const httpPort = w.ports.http ?? 9091;
       const wsPort = w.ports.ws ?? httpPort;
+
+      // Legacy fallback endpoints — only present during a port migration.
+      // Built with the same URL shape as their primary counterparts so the
+      // connect path can dial them transparently.
+      const legacyQuic =
+        w.ports.legacy_quic !== undefined
+          ? `quic://${w.ip}:${w.ports.legacy_quic}`
+          : undefined;
+      const legacyGrpc =
+        w.ports.legacy_grpc !== undefined
+          ? `http://${w.ip}:${w.ports.legacy_grpc}`
+          : undefined;
+      const legacyWebsocket =
+        w.ports.legacy_ws !== undefined
+          ? `ws://${w.ip}:${w.ports.legacy_ws}/ws`
+          : undefined;
+
       return {
         id: w.id,
         region: w.region,
         quic: `quic://${w.ip}:${w.ports.quic}`,
         websocket: `ws://${w.ip}:${wsPort}/ws`,
         http: `http://${w.ip}:${httpPort}`,
+        legacyQuic,
+        legacyGrpc,
+        legacyWebsocket,
       };
     });
+}
+
+/** Protocols whose worker endpoint carries both a primary and a legacy variant. */
+export type LegacyCapableProtocol = 'quic' | 'websocket';
+
+/**
+ * Build the ordered list of connect targets for a worker endpoint and
+ * protocol: the primary endpoint first, followed by the legacy endpoint
+ * (if the worker advertises one and it differs from the primary).
+ *
+ * Returns `[primary]` when there is no legacy endpoint (today's
+ * single-attempt behavior, unchanged for old control planes / workers
+ * that never had a port migration), or `[]` when the worker has no
+ * primary endpoint for the protocol at all.
+ */
+export function connectTargets(
+  endpoint: WorkerEndpoint,
+  protocol: LegacyCapableProtocol,
+): string[] {
+  const primary = protocol === 'quic' ? endpoint.quic : endpoint.websocket;
+  if (!primary) return [];
+
+  const legacy = protocol === 'quic' ? endpoint.legacyQuic : endpoint.legacyWebsocket;
+
+  if (!legacy || legacy === primary) return [primary];
+  return [primary, legacy];
 }
 
 /**

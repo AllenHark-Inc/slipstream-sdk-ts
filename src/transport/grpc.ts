@@ -13,6 +13,9 @@
  *   await transport.connect();
  */
 
+import { SlipstreamError } from '../errors';
+import { tryTargets } from './fallback';
+
 export interface GrpcTransportOptions {
   /** gRPC server address (host:port) */
   address: string;
@@ -22,6 +25,13 @@ export interface GrpcTransportOptions {
   connectTimeout?: number;
   /** Whether to use TLS (default: false for local, true for production) */
   useTls?: boolean;
+  /**
+   * Legacy gRPC address advertised by the worker during a port migration.
+   * Absent on old control planes / workers with no active migration.
+   * On a connect/transport failure against `address`, `connect()` retries
+   * ONCE against this address before surfacing the error.
+   */
+  legacyAddress?: string;
 }
 
 /**
@@ -37,6 +47,7 @@ export interface GrpcTransportOptions {
  */
 export class GrpcTransport {
   private readonly address: string;
+  private readonly legacyAddress?: string;
   private readonly apiKey: string;
   private readonly connectTimeout: number;
   private readonly useTls: boolean;
@@ -45,6 +56,7 @@ export class GrpcTransport {
 
   constructor(options: GrpcTransportOptions) {
     this.address = options.address;
+    this.legacyAddress = options.legacyAddress;
     this.apiKey = options.apiKey;
     this.connectTimeout = options.connectTimeout ?? 5000;
     this.useTls = options.useTls ?? false;
@@ -53,6 +65,12 @@ export class GrpcTransport {
   /**
    * Connect to the gRPC server.
    * Dynamically imports @grpc/grpc-js and @grpc/proto-loader.
+   *
+   * Prefers the primary address; falls back ONCE to the legacy address (if
+   * the worker advertises one) when the primary attempt fails with a
+   * connect/transport error. A successful primary connect never attempts
+   * the legacy address. No legacy address ⇒ single attempt, unchanged
+   * behavior.
    */
   async connect(): Promise<{ sessionId: string; region: string }> {
     // Dynamic import to avoid requiring grpc as a hard dependency
@@ -89,21 +107,37 @@ export class GrpcTransport {
     const protoDescriptor = grpc.loadPackageDefinition(packageDefinition) as any;
     const SlipstreamService = protoDescriptor.slipstream.SlipstreamService;
 
+    const targets =
+      this.legacyAddress !== undefined && this.legacyAddress !== this.address
+        ? [this.address, this.legacyAddress]
+        : [this.address];
+
+    return tryTargets(targets, (target) => this.connectToAddress(target, grpc, SlipstreamService));
+  }
+
+  private async connectToAddress(
+    address: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    grpc: any,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    SlipstreamService: any,
+  ): Promise<{ sessionId: string; region: string }> {
     // Create client with credentials
     const credentials = this.useTls
       ? grpc.credentials.createSsl()
       : grpc.credentials.createInsecure();
 
-    this.client = new SlipstreamService(this.address, credentials);
+    this.client = new SlipstreamService(address, credentials);
 
     // Verify connection
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const status = await new Promise<any>((resolve, reject) => {
       const deadline = new Date(Date.now() + this.connectTimeout);
       (this.client as any).getConnectionStatus(
         { apiKey: this.apiKey },
         { deadline },
         (err: Error | null, response: any) => {
-          if (err) reject(err);
+          if (err) reject(SlipstreamError.connection(err.message));
           else resolve(response);
         }
       );

@@ -44,6 +44,7 @@ import {
   STREAM_TYPE,
   StreamType,
 } from './binary';
+import { tryTargets } from './fallback';
 
 // Lazy-load the QUIC library to avoid hard dependency
 let quicLib: QuicLibrary | null = null;
@@ -97,6 +98,11 @@ function loadQuicLib(): QuicLibrary {
 export class QuicTransport extends EventEmitter {
   private readonly host: string;
   private readonly port: number;
+  /**
+   * Legacy QUIC port advertised by the worker during a port migration.
+   * Absent on old control planes / workers with no active migration.
+   */
+  private readonly legacyPort?: number;
   private readonly apiKey: string;
   private readonly region?: string;
   private readonly tier: BillingTier;
@@ -114,10 +120,11 @@ export class QuicTransport extends EventEmitter {
   private requestCounter = 0;
   private pingSeq = 0;
 
-  constructor(host: string, port: number, apiKey: string, region?: string, tier: BillingTier = 'pro', config?: Partial<QuicConfig>) {
+  constructor(host: string, port: number, apiKey: string, region?: string, tier: BillingTier = 'pro', config?: Partial<QuicConfig>, legacyPort?: number) {
     super();
     this.host = host;
     this.port = port;
+    this.legacyPort = legacyPort;
     this.apiKey = apiKey;
     this.region = region;
     this.tier = tier;
@@ -131,8 +138,22 @@ export class QuicTransport extends EventEmitter {
 
   /**
    * Connect to the worker's QUIC endpoint and authenticate.
+   *
+   * Prefers the primary port; falls back ONCE to the legacy port (if the
+   * worker advertises one) when the primary attempt fails with a
+   * connect/transport error. A successful primary connect never attempts
+   * the legacy port. No legacy port ⇒ single attempt, unchanged behavior.
    */
   async connect(): Promise<ConnectionInfo> {
+    const targets =
+      this.legacyPort !== undefined && this.legacyPort !== this.port
+        ? [String(this.port), String(this.legacyPort)]
+        : [String(this.port)];
+
+    return tryTargets(targets, (target) => this.connectToPort(Number(target)));
+  }
+
+  private async connectToPort(port: number): Promise<ConnectionInfo> {
     const lib = loadQuicLib();
 
     // Create endpoint
@@ -142,7 +163,7 @@ export class QuicTransport extends EventEmitter {
     });
 
     // Connect with timeout
-    const connectPromise = this.endpoint.connect(this.host, this.port, {
+    const connectPromise = this.endpoint.connect(this.host, port, {
       insecure: this.quicConfig.insecure,
       serverName: this.host,
     });
@@ -151,7 +172,14 @@ export class QuicTransport extends EventEmitter {
       setTimeout(() => reject(SlipstreamError.timeout(this.quicConfig.timeout)), this.quicConfig.timeout),
     );
 
-    this.connection = await Promise.race([connectPromise, timeoutPromise]);
+    try {
+      this.connection = await Promise.race([connectPromise, timeoutPromise]);
+    } catch (err) {
+      if (err instanceof SlipstreamError) throw err;
+      throw SlipstreamError.connection(
+        `QUIC connect failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
 
     // Authenticate via first bi-directional stream (sends tier for billing)
     const authStream = await this.connection.openBidirectionalStream();

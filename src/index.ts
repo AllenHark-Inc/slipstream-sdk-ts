@@ -38,7 +38,8 @@ export { MultiRegionClient } from './multi-region';
 export { ConfigBuilder, configBuilder } from './config';
 
 // Discovery
-export { discover, DEFAULT_DISCOVERY_URL } from './discovery';
+export { discover, DEFAULT_DISCOVERY_URL, connectTargets } from './discovery';
+export type { LegacyCapableProtocol } from './discovery';
 
 // Typed Solana RPC
 export { SolanaRpc } from './rpc';
