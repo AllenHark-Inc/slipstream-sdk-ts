@@ -16,6 +16,14 @@ export interface SlipstreamConfig {
   endpoint?: string;
   /** WebSocket endpoint URL (set by discovery, separate from HTTP endpoint) */
   wsEndpoint?: string;
+  /**
+   * Legacy WebSocket endpoint URL advertised by the worker during a port
+   * migration (set by discovery from `WorkerEndpoint.legacyWebsocket`).
+   * When present, the WebSocket transport falls back to it ONCE if the
+   * primary connect fails. Absent on old control planes / explicit-endpoint
+   * mode ⇒ single-attempt connect, unchanged behavior.
+   */
+  wsLegacyEndpoint?: string;
   discoveryUrl: string;
   /** Billing tier — determines cost per transaction and rate limits.
    * Default: 'pro'. Free/Standard=0.00005 SOL, Pro=0.0001 SOL, Enterprise=0.001 SOL per tx. */

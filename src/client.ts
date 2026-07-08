@@ -143,7 +143,13 @@ export class SlipstreamClient extends EventEmitter {
     const wsUrl = getWsEndpoint(config);
 
     this.http = new HttpTransport(httpUrl, config.apiKey, config.protocolTimeouts.http);
-    this.ws = new WebSocketTransport(wsUrl, config.apiKey, config.region, config.tier);
+    this.ws = new WebSocketTransport(
+      wsUrl,
+      config.apiKey,
+      config.region,
+      config.tier,
+      config.wsLegacyEndpoint,
+    );
     this.rpc = new SolanaRpc((method, params) => this.http.rpc(method, params));
 
     // Forward WS events
@@ -218,6 +224,10 @@ export class SlipstreamClient extends EventEmitter {
           region,
           endpoint: worker.http,
           wsEndpoint: worker.websocket,
+          // Thread the discovery-advertised legacy WebSocket endpoint through
+          // so the WS transport can fall back to it once on connect failure.
+          // undefined when the worker advertises no legacy port ⇒ unchanged.
+          wsLegacyEndpoint: worker.legacyWebsocket,
         };
 
         try {
