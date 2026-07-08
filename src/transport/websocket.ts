@@ -86,6 +86,15 @@ export class WebSocketTransport extends EventEmitter {
   private async connectToUrl(url: string): Promise<ConnectionInfo> {
     return new Promise((resolve, reject) => {
       try {
+        // Clean up a previous attempt's socket before dialing this target.
+        // This matters for the legacy-fallback retry: if the primary
+        // attempt just failed, `this.ws` still holds that abandoned socket
+        // with its onopen/onmessage/onerror/onclose listeners attached.
+        // Detach and close it here — before the retry's listeners fire —
+        // so it can't leak listeners or fire a stale `close` into a handler
+        // that would schedule a spurious reconnect.
+        this.cleanupSocket();
+
         // Use ws package (Node.js)
         this.ws = new WebSocketModule(url);
 
@@ -210,12 +219,28 @@ export class WebSocketTransport extends EventEmitter {
       this.reconnectTimer = null;
     }
 
-    if (this.ws) {
-      this.ws.close();
-      this.ws = null;
-    }
+    this.cleanupSocket();
 
     this.connected = false;
+  }
+
+  /**
+   * Detach event listeners from `this.ws` (if any) and close it, then clear
+   * the reference. Used both by `disconnect()` and, before dialing a new
+   * target in `connectToUrl()`, to make sure an abandoned socket (e.g. a
+   * failed primary attempt right before the legacy fallback) never fires
+   * `open`/`message`/`error`/`close` into stale handlers.
+   */
+  private cleanupSocket(): void {
+    if (!this.ws) return;
+
+    this.ws.removeAllListeners();
+    try {
+      this.ws.close();
+    } catch {
+      // Best-effort — the socket may already be closed/closing.
+    }
+    this.ws = null;
   }
 
   isConnected(): boolean {

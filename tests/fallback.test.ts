@@ -1,7 +1,54 @@
+// Mock the `ws` package so WebSocketTransport tests below can drive fake
+// sockets without opening real connections. Exposes `__instances` (all
+// created sockets, in creation order) on the mocked module so tests can
+// inspect/emit on them directly.
+jest.mock('ws', () => {
+  const { EventEmitter } = require('events');
+
+  class MockWebSocket extends EventEmitter {
+    url: string;
+    closeCalled = false;
+    listenerCountAtClose: number | null = null;
+
+    constructor(url: string) {
+      super();
+      this.url = url;
+      (MockWebSocket as unknown as { __instances: MockWebSocket[] }).__instances.push(this);
+    }
+
+    send(_data: string): void {
+      // no-op — tests don't assert on outbound messages here
+    }
+
+    close(): void {
+      this.closeCalled = true;
+      this.listenerCountAtClose = this.eventNames().length;
+    }
+  }
+
+  (MockWebSocket as unknown as { __instances: unknown[] }).__instances = [];
+
+  return { __esModule: true, default: MockWebSocket };
+});
+
 import { connectTargets } from '../src/discovery';
 import { SlipstreamError } from '../src/errors';
 import { isConnectFailure, tryTargets } from '../src/transport/fallback';
+import { WebSocketTransport } from '../src/transport/websocket';
 import { WorkerEndpoint } from '../src/types';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const wsModule = require('ws');
+
+interface MockWebSocketInstance extends NodeJS.EventEmitter {
+  url: string;
+  closeCalled: boolean;
+  listenerCountAtClose: number | null;
+}
+
+function mockWsInstances(): MockWebSocketInstance[] {
+  return wsModule.default.__instances as MockWebSocketInstance[];
+}
 
 // ============================================================================
 // connectTargets ordering
@@ -114,5 +161,109 @@ describe('tryTargets', () => {
 
     await expect(tryTargets(['primary', 'legacy'], attemptFn)).rejects.toThrow('refused:legacy');
     expect(attemptFn).toHaveBeenCalledTimes(2);
+  });
+});
+
+// ============================================================================
+// WebSocketTransport — abandoned primary socket cleanup on legacy fallback
+// ============================================================================
+
+describe('WebSocketTransport legacy fallback socket cleanup', () => {
+  beforeEach(() => {
+    mockWsInstances().length = 0;
+  });
+
+  test('closes and detaches the failed primary socket before dialing the legacy URL', async () => {
+    const transport = new WebSocketTransport(
+      'ws://primary.invalid/ws',
+      'sk_test_00000000',
+      undefined,
+      'pro',
+      'ws://legacy.invalid/ws',
+    );
+
+    const connectPromise = transport.connect();
+
+    // Let the primary socket get created.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(mockWsInstances()).toHaveLength(1);
+    const primary = mockWsInstances()[0];
+    expect(primary.url).toBe('ws://primary.invalid/ws');
+    expect(primary.closeCalled).toBe(false);
+
+    // Simulate the primary connect failing (e.g. connection refused).
+    primary.emit('error', new Error('ECONNREFUSED'));
+
+    // Give the fallback loop a couple of microtask ticks to catch the
+    // rejection and dial the legacy target.
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    // The legacy socket must exist, and the primary must have been closed
+    // and detached (listeners removed) before it was created.
+    expect(mockWsInstances()).toHaveLength(2);
+    const legacy = mockWsInstances()[1];
+    expect(legacy.url).toBe('ws://legacy.invalid/ws');
+
+    expect(primary.closeCalled).toBe(true);
+    expect(primary.listenerCountAtClose).toBe(0);
+    expect(primary.eventNames()).toHaveLength(0);
+
+    // Resolve the legacy attempt so the connect() promise settles cleanly
+    // and doesn't leave a dangling handle in the test run.
+    legacy.emit(
+      'message',
+      JSON.stringify({
+        type: 'connected',
+        session_id: 'sess-1',
+        region: 'us-east',
+        server_time: Date.now(),
+        features: [],
+        rate_limit: { rps: 100, burst: 200 },
+      }),
+    );
+
+    const info = await connectPromise;
+    expect(info.sessionId).toBe('sess-1');
+
+    await transport.disconnect();
+  });
+
+  test('success path (no legacy) never touches a second socket', async () => {
+    const transport = new WebSocketTransport(
+      'ws://primary.invalid/ws',
+      'sk_test_00000000',
+      undefined,
+      'pro',
+    );
+
+    const connectPromise = transport.connect();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(mockWsInstances()).toHaveLength(1);
+    const primary = mockWsInstances()[0];
+
+    primary.emit(
+      'message',
+      JSON.stringify({
+        type: 'connected',
+        session_id: 'sess-solo',
+        region: 'us-east',
+        server_time: Date.now(),
+        features: [],
+        rate_limit: { rps: 100, burst: 200 },
+      }),
+    );
+
+    const info = await connectPromise;
+    expect(info.sessionId).toBe('sess-solo');
+    expect(mockWsInstances()).toHaveLength(1);
+    expect(primary.closeCalled).toBe(false);
+
+    await transport.disconnect();
+    expect(primary.closeCalled).toBe(true);
   });
 });
